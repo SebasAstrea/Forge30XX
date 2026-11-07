@@ -30,3 +30,5 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   por perfil (RF-15), secciones `[context_router]` y `[rag]` en la config, y
   guía `docs/rag-integration.md`.
 - `docs/adr/0001-integracion-rag-portable.md`.
+- `docs/adr/0002-cliente-http-rust-rag.md` (Propuesta, pendiente de aprobación
+  del PO): propone `reqwest` sin TLS para el transporte HTTP del RAG en Rust (S7).
