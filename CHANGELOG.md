@@ -9,6 +9,12 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- Detección de hardware y `forge doctor` (RF-00, RF-21b, HU-00): módulo
+  `hardware` con `recommend` (lógica pura de selección de perfil según la
+  matriz SDD §2), `parse_nvidia_smi` y `detect`; el comando imprime perfil,
+  modelo, contexto, cuantización KV, ventana KVFlash y avisos (TGP<100W,
+  GPU no-30xx). Guía `docs/hardware-detection.md`. 10 tests unitarios.
+
 - Estructura de directorios del repositorio (Sprint S0 — Bootstrap).
 - `docs/SDD.md`: spec movido a `docs/` (antes `SDD_DOC.md`).
 - Sección "Lectura obligatoria" en `AGENTS.md` (11.-1).

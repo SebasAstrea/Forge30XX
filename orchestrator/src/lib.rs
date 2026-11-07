@@ -6,6 +6,7 @@
 #![warn(missing_docs)]
 
 pub mod config;
+pub mod hardware;
 pub mod rag;
 
 /// Error raíz de la librería del orquestador.

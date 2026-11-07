@@ -7,6 +7,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use forge::config::Config;
+use forge::hardware::{self, Recommendation};
 
 /// Agente de codificación local para GPUs Nvidia serie 30xx.
 #[derive(Parser)]
@@ -59,12 +60,46 @@ fn main() -> Result<()> {
 }
 
 fn cmd_doctor(config_path: &str) -> Result<()> {
-    // RF-00 (detección real de GPU/VRAM/TGP/PCIe) pendiente: Sprint S0b.
-    let cfg = Config::load(config_path)?;
-    tracing::info!(profile = %cfg.hardware.profile, "doctor: configuración cargada");
-    println!("forge doctor — perfil configurado: {}", cfg.hardware.profile);
-    println!("(detección de hardware pendiente: RF-00, Sprint S0b)");
+    let started = std::time::Instant::now();
+    // La configuración se carga para conocer overrides futuros; su ausencia no
+    // impide el diagnóstico de hardware.
+    if let Ok(cfg) = Config::load(config_path) {
+        tracing::info!(profile = %cfg.hardware.profile, "doctor: config cargada");
+    }
+
+    match hardware::detect() {
+        Ok(rec) => {
+            print_recommendation(&rec);
+            tracing::info!(profile = rec.profile.label(), "doctor ok");
+        }
+        Err(e) => {
+            println!("forge doctor — no se detectó GPU NVIDIA.");
+            println!("  motivo: {e}");
+            println!("  (requiere driver NVIDIA y nvidia-smi en PATH)");
+            tracing::warn!(error = %e, "doctor: sin GPU");
+        }
+    }
+
+    let elapsed = started.elapsed();
+    println!("\nDiagnóstico completado en {} ms (objetivo RF-00: <3000 ms).", elapsed.as_millis());
     Ok(())
+}
+
+fn print_recommendation(rec: &Recommendation) {
+    println!("forge doctor — configuración recomendada");
+    println!("  Perfil         : {}", rec.profile.label());
+    println!("  Modelo         : {}", rec.model);
+    println!("  Contexto       : {} tokens", rec.context_tokens);
+    println!("  Cuantización KV: {}", rec.kv_quant);
+    println!("  Ventana KVFlash: {} tokens", rec.kvflash_window);
+    if rec.warnings.is_empty() {
+        println!("  Avisos         : ninguno");
+    } else {
+        println!("  Avisos         :");
+        for w in &rec.warnings {
+            println!("    - {w}");
+        }
+    }
 }
 
 fn cmd_run(_ui: bool) -> Result<()> {
