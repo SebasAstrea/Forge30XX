@@ -149,7 +149,7 @@ La UI queda disponible en `http://localhost:7860`.
 Requiere Rust 1.80+, Python 3.11+, CUDA 12.1+, CMake 3.28+.
 
 ```bash
-git clone https://github.com/<tu-usuario>/Forge30XX.git
+git clone https://github.com/SebasAstrea/Forge30XX.git
 cd Forge30XX
 
 # Dependencias del sistema
