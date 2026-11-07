@@ -1,0 +1,43 @@
+# Pre-commit hooks (SDD sección 8). Instalar con: pre-commit install
+# Los hooks por capa solo corren si la capa existe (bootstrap-friendly).
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  - repo: local
+    hooks:
+      - id: rustfmt
+        name: rustfmt
+        entry: bash -c 'test -f orchestrator/Cargo.toml && (cd orchestrator && cargo fmt --all --check) || true'
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+      - id: clippy
+        name: clippy -D warnings
+        entry: bash -c 'test -f orchestrator/Cargo.toml && (cd orchestrator && cargo clippy --all-targets -- -D warnings) || true'
+        language: system
+        files: \.rs$
+        pass_filenames: false
+
+      - id: ruff
+        name: ruff check + format
+        entry: bash -c 'test -f python/pyproject.toml && (cd python && ruff check . && ruff format --check .) || true'
+        language: system
+        files: \.py$
+        pass_filenames: false
+
+      - id: prettier
+        name: prettier
+        entry: bash -c 'test -f frontend/package.json && (cd frontend && npm run format:check) || true'
+        language: system
+        files: \.(ts|svelte|css|json|md)$
+        pass_filenames: false

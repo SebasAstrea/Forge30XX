@@ -1,0 +1,53 @@
+# === Modelos y artefactos (grandes, no versionar) ===
+models/*
+!models/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+
+# === Rust / orchestrator ===
+target/
+**/*.rs.bk
+Cargo.lock.orig
+
+# === Python / ML ===
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+
+# === Frontend / Node ===
+node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/dist/
+*.tsbuildinfo
+
+# === Inferencia / C++ / CUDA ===
+inference/build/
+*.o
+*.obj
+*.gguf
+
+# === Sesión y estado local del agente ===
+.forge/
+
+# === Entorno y secretos ===
+.env
+.env.*
+!.env.example
+
+# === Editor / OS ===
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

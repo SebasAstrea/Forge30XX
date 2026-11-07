@@ -1,0 +1,44 @@
+# Configuración de Forge30XX. Ver docs/SDD.md sección 2 (perfiles) y README.
+# Los valores pueden sobreescribirse con variables de entorno prefijo FORGE_.
+
+[hardware]
+profile = "auto"           # "A", "B" o "auto"
+gpu_index = 0              # GPU principal
+kv_split_ratio = 0.6       # Perfil B: fracción de KV en GPU0
+
+[model]
+path = "models/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+context_size = 32768
+quantization = "turbo2"    # turbo2, turbo3, turbo4
+kvflash_window = 4096      # 4096 (A), 8192 (B)
+
+[inference]
+temperature = 0.2
+top_p = 0.95
+max_tokens = 4096
+grammar = "tool_calls.gbnf"
+
+[context_router]
+rag_threshold_tokens = 1500   # A: 1500, B: 3000
+summarize_at_percent = 70
+
+[rag]
+# Servicio RAG externo (port-rag-potty). Ver docs/rag-integration.md, ADR-0001.
+base_url = "http://localhost:8765"
+timeout_ms = 5000
+
+[security]
+guard_input = true
+guard_output = true
+guard_on_cpu_threshold = 0.90
+allowed_domains = ["docs.python.org", "doc.rust-lang.org", "developer.mozilla.org"]
+
+[tools]
+workspace = "."
+max_file_size_mb = 10
+shell_timeout_s = 30
+shell_allowlist = ["ls", "cat", "grep", "find", "git", "cargo", "npm", "python"]
+
+[ui]
+port = 7860
+theme = "dark"

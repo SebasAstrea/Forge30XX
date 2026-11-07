@@ -1,0 +1,106 @@
+# Forge30XX — Docker Compose. docs/SDD.md ADR-06, RNF-05.
+# Perfil A: 1 GPU 6 GB. Perfil B: 2 GPU 12 GB. Selecciona con `--profile a|b`.
+# El RAG (ADR-0001, Opción C) corre como servicio externo `forge-rag` + `ollama`,
+# consumido por HTTP. Su código NO vive en este repo: se construye desde el repo
+# clonado de port-rag-potty, cuya ruta se pasa en RAG_REPO_PATH.
+# Requiere nvidia-container-toolkit en el host.
+
+services:
+  forge-a:
+    profiles: ["a"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.a
+    image: forge30xx:profile-a
+    environment:
+      FORGE_PROFILE: "A"
+      FORGE_UI__PORT: "7860"
+      FORGE_LOG_LEVEL: "info"
+      FORGE_RAG__BASE_URL: "http://forge-rag:8765"
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./models:/app/models
+      - ./forge.config.toml:/app/forge.config.toml:ro
+      - forge-state:/app/.forge
+    depends_on:
+      forge-rag:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  forge-b:
+    profiles: ["b"]
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.b
+    image: forge30xx:profile-b
+    environment:
+      FORGE_PROFILE: "B"
+      FORGE_UI__PORT: "7860"
+      FORGE_LOG_LEVEL: "info"
+      FORGE_RAG__BASE_URL: "http://forge-rag:8765"
+    ports:
+      - "7860:7860"
+    volumes:
+      - ./models:/app/models
+      - ./forge.config.toml:/app/forge.config.toml:ro
+      - forge-state:/app/.forge
+    depends_on:
+      forge-rag:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 2
+              capabilities: [gpu]
+
+  # Servicio RAG portable (port-rag-potty). Build context = repo del RAG clonado
+  # aparte; por defecto ../port-rag-potty. Monta el workspace de Forge en /app
+  # para indexarlo. Ver docs/rag-integration.md.
+  forge-rag:
+    profiles: ["a", "b"]
+    build:
+      context: "${RAG_REPO_PATH:-../port-rag-potty}/rag"
+    image: forge30xx-rag:latest
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+      RAG_PORT: "8765"
+      RAG_EMBED_MODEL: "bge-m3"
+      RAG_EMBED_DIM: "1024"
+    ports:
+      - "8765:8765"
+    volumes:
+      - .:/app
+      - rag-data:/app/rag/data
+    working_dir: /app
+    command: ["python", "-m", "rag.server"]
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Ollama con el modelo de embeddings bge-m3 (motor del RAG).
+  ollama:
+    profiles: ["a", "b"]
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+volumes:
+  forge-state:
+  rag-data:
+  ollama-data:

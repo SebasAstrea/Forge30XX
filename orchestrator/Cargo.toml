@@ -1,0 +1,39 @@
+[package]
+name = "forge"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+description = "Forge30XX orchestrator: Axum + Tokio, router, tool executor, guardrails"
+
+[[bin]]
+name = "forge"
+path = "src/main.rs"
+
+[lib]
+name = "forge"
+path = "src/lib.rs"
+
+[dependencies]
+# Stack fijado en docs/SDD.md sección 8.
+axum = "0.7"
+tokio = { version = "1.40", features = ["full"] }
+tonic = "0.12"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+clap = { version = "4.5", features = ["derive"] }
+figment = { version = "0.10", features = ["toml", "env"] }
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+thiserror = "1"
+anyhow = "1"
+
+[dev-dependencies]
+proptest = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

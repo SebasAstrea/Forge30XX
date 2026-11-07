@@ -1,0 +1,122 @@
+name: CI
+
+# Lint + test por capa en runners estándar (sin GPU).
+# Los tests de perfil A/B y benchmarks con GPU viven en ci-hardware.yml.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  detect-layers:
+    name: Detectar capas presentes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.detect.outputs.rust }}
+      python: ${{ steps.detect.outputs.python }}
+      frontend: ${{ steps.detect.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        shell: bash
+        run: |
+          echo "rust=$([[ -f orchestrator/Cargo.toml ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "python=$([[ -f python/pyproject.toml ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$([[ -f frontend/package.json ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  rust:
+    name: Rust · fmt + clippy + test
+    needs: detect-layers
+    if: needs.detect-layers.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: orchestrator
+      - name: fmt
+        run: cargo fmt --all --check
+      - name: clippy (-D warnings)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: test
+        run: cargo test --all-features
+      - name: coverage (>=80%)
+        run: |
+          cargo install cargo-llvm-cov --locked
+          cargo llvm-cov --fail-under-lines 80
+
+  python:
+    name: Python · ruff + mypy + pytest
+    needs: detect-layers
+    if: needs.detect-layers.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Instalar dependencias (dev)
+        run: pip install -e ".[dev]"
+      - name: ruff format
+        run: ruff format --check .
+      - name: ruff check
+        run: ruff check .
+      - name: mypy --strict
+        run: mypy --strict forge_ml forge_rag
+      - name: pytest (cov >=80%)
+        run: pytest --cov=forge_ml --cov=forge_rag --cov-fail-under=80
+
+  frontend:
+    name: Frontend · lint + check + vitest
+    needs: detect-layers
+    if: needs.detect-layers.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: prettier
+        run: npm run format:check
+      - name: eslint
+        run: npm run lint
+      - name: svelte-check
+        run: npm run check
+      - name: vitest
+        run: npm run test -- --run
+
+  bootstrap-ok:
+    name: Bootstrap (sin capas aún)
+    needs: detect-layers
+    if: >-
+      needs.detect-layers.outputs.rust == 'false' &&
+      needs.detect-layers.outputs.python == 'false' &&
+      needs.detect-layers.outputs.frontend == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Fase bootstrap: aún no hay capas de código. CI en verde."

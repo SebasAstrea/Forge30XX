@@ -1,0 +1,48 @@
+name: CI Hardware (A/B)
+
+# Matriz de hardware real en runners self-hosted con GPU (RNF-04, AGENTS.md 11.6).
+# No se mockea la GPU: se usan modelos pequeños reales (Qwen2.5-Coder-0.5B).
+# Requiere runners self-hosted etiquetados: [self-hosted, gpu, <perfil>].
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *" # nightly 03:00 UTC
+  pull_request:
+    branches: [main]
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  hardware-matrix:
+    # Ejecuta en PRs solo si llevan la etiqueta run:hardware, o en nightly/manual.
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'run:hardware')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "A · 3060 6GB Laptop"
+            profile: A
+            runner: [self-hosted, gpu, rtx3060-6gb]
+          - name: "A+ · 3060 12GB single"
+            profile: A
+            runner: [self-hosted, gpu, rtx3060-12gb]
+          - name: "B · 2x3060 12GB"
+            profile: B
+            runner: [self-hosted, gpu, rtx3060-dual]
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mostrar GPUs
+        run: nvidia-smi
+      - name: make doctor
+        run: make doctor
+      - name: Tests de perfil
+        run: make test-${{ matrix.profile == 'A' && 'a' || 'b' }}
+      - name: Benchmarks (regresión >5% tok/s / >10% p95 bloquea)
+        run: make bench

@@ -1,0 +1,15 @@
+.git
+target/
+**/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+.venv/
+**/__pycache__/
+models/*
+!models/.gitkeep
+artifacts/*
+!artifacts/.gitkeep
+inference/build/
+.forge/
+*.gguf
+.env

@@ -422,6 +422,7 @@ Forge30XX/
   models/                # GGUF (gitignored)
   artifacts/             # LoRA outputs (gitignored)
   docs/
+    SDD.md               # Spec-Driven Development
     adr/                 # Architecture Decision Records
     openapi.yaml         # API spec
   tests/
@@ -440,7 +441,7 @@ Forge30XX/
 
 ## Contribuir
 
-1. Lee `SDD.md` y `AGENTS.md` antes de tocar código.
+1. Lee `docs/SDD.md` y `AGENTS.md` antes de tocar código.
 2. Abre un issue con el RF o HU asociado.
 3. Crea rama `feat/RF-XX-descripcion` o `fix/descripcion`.
 4. Sigue TDD: test que falla, código mínimo, refactor.
@@ -480,7 +481,7 @@ Procedimiento:
 4. Esperar respuesta antes de continuar.
 5. Documentar como ADR y reflejar en SDD y backlog.
 
-Detalle completo en `AGENTS.md` sección 11.0 y `SDD.md` sección 0.
+Detalle completo en `AGENTS.md` sección 11.0 y `docs/SDD.md` sección 0.
 
 ---
 
