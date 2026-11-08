@@ -40,11 +40,17 @@ d3732ce feat(bootstrap): scaffold repo, Makefile/CI, esqueletos y RAG externo
 
 ## Pendiente (siguientes sesiones)
 
-### Cierre de S1
-- [ ] **RF-08 — gramática GBNF** para tool-calls JSON/XML (≥90% A / ≥95% B
-      parseables). Anotado en `docs/inference.md`; encaja junto a S6.
-- [ ] **Streaming SSE** en `forge chat`/API: hoy `InferenceClient::chat` es
-      no-streaming (`stream: false`). El SDD pide streaming de tokens (RF-18).
+- [x] **Cierre de S1**: streaming SSE en `forge chat` (ADR-0003) y RF-08
+      (gramática GBNF; 100% parseables en 30 prompts con 3B Q8_0). Pendiente
+      repetir la medición con Q4_K_M y con 7B (perfil B).
+- [x] **ADR-0004**: motor = fork `TheTom/llama-cpp-turboquant` (en
+      `C:\Users\Sebastian\Downloads\llama-cpp-turboquant`) por HTTP/OpenAI.
+
+### Bloqueos de S2
+- [ ] Compilar el fork con CUDA: en Windows falta MSVC (nvcc no admite MinGW);
+      en WSL2 Ubuntu faltan cmake, g++ y CUDA toolkit.
+- [ ] El fork tiene `turbo2`…`turbo6` pero ninguna implementación llamada
+      KVFlash (RF-06). Decidir qué la cubre.
 
 ### Backlog inmediato (orden del SDD §6)
 - [ ] **S2 — KV Perfil A**: RF-05 (turbo2), RF-06 (KVFlash 4K), HU-03.
@@ -64,12 +70,7 @@ d3732ce feat(bootstrap): scaffold repo, Makefile/CI, esqueletos y RAG externo
 - [ ] **S13 — release**: RNF-05/07/12/15.
 
 ### Deuda técnica / notas para el PO
-- [ ] **Decisión PO pendiente**: el SDD (ADR-03/ADR-05) fija el fork
-      `atomicmilkshake/llama-cpp-turboquant` y gRPC para inferencia. S1 se
-      implementó contra un **llama-server estándar vía HTTP/OpenAI** (lo
-      disponible y lo que exige RF-07). Antes de S2 hay que decidir: integrar el
-      fork TurboQuant (necesario para RF-05/RF-06) y si inferencia migra a gRPC
-      o se queda en HTTP. Abrir issue `decision:po`.
+- [x] **Decisión PO tomada** (ADR-0004): fork TurboQuant de Downloads + HTTP.
 - [x] `python/`: `pip install -e .[dev]` verificado en venv local (Python 3.13).
       `ruff format`, `ruff check`, `mypy --strict` y `pytest` (6 tests, 93%
       cobertura) en verde. Se corrigieron 7 errores de `mypy --strict` en

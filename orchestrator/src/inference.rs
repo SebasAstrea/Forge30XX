@@ -9,6 +9,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+mod sse;
+
 /// Error de inferencia.
 #[derive(Debug, thiserror::Error)]
 pub enum InferenceError {
@@ -18,6 +20,9 @@ pub enum InferenceError {
     /// La respuesta no contenía ninguna opción (`choices` vacío).
     #[error("respuesta sin choices")]
     EmptyResponse,
+    /// El stream contenía un evento inválido o un error del servidor.
+    #[error("protocolo inferencia: {0}")]
+    Protocol(String),
 }
 
 /// Rol de un mensaje en el chat.
@@ -70,6 +75,8 @@ pub struct SamplingParams {
     pub top_p: f32,
     /// Máximo de tokens a generar.
     pub max_tokens: u32,
+    /// Gramática GBNF que restringe la salida (RF-08). `None` = texto libre.
+    pub grammar: Option<String>,
 }
 
 impl Default for SamplingParams {
@@ -79,6 +86,7 @@ impl Default for SamplingParams {
             temperature: 0.2,
             top_p: 0.95,
             max_tokens: 4096,
+            grammar: None,
         }
     }
 }
@@ -91,6 +99,22 @@ struct ChatRequest<'a> {
     top_p: f32,
     max_tokens: u32,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    grammar: Option<&'a str>,
+}
+
+impl<'a> ChatRequest<'a> {
+    fn new(messages: &'a [Message], params: &'a SamplingParams, stream: bool) -> Self {
+        Self {
+            model: &params.model,
+            messages,
+            temperature: params.temperature,
+            top_p: params.top_p,
+            max_tokens: params.max_tokens,
+            stream,
+            grammar: params.grammar.as_deref(),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -113,18 +137,28 @@ struct ResponseMessage {
 pub struct InferenceClient {
     base_url: String,
     http: reqwest::Client,
+    timeout: Duration,
+}
+
+fn transport(e: impl std::fmt::Display) -> InferenceError {
+    InferenceError::Transport(e.to_string())
 }
 
 impl InferenceClient {
     /// Crea un cliente contra `base_url` (p. ej. `http://127.0.0.1:8080`).
+    ///
+    /// `timeout` es total en `chat` y entre trozos recibidos en `chat_stream`,
+    /// para no cortar generaciones largas (ADR-0003).
     pub fn new(base_url: impl Into<String>, timeout: Duration) -> Result<Self, InferenceError> {
         let http = reqwest::Client::builder()
-            .timeout(timeout)
+            .connect_timeout(timeout)
+            .read_timeout(timeout)
             .build()
-            .map_err(|e| InferenceError::Transport(e.to_string()))?;
+            .map_err(transport)?;
         Ok(Self {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             http,
+            timeout,
         })
     }
 
@@ -134,9 +168,10 @@ impl InferenceClient {
         let resp = self
             .http
             .get(url)
+            .timeout(self.timeout)
             .send()
             .await
-            .map_err(|e| InferenceError::Transport(e.to_string()))?;
+            .map_err(transport)?;
         Ok(resp.status().is_success())
     }
 
@@ -146,29 +181,10 @@ impl InferenceClient {
         messages: &[Message],
         params: &SamplingParams,
     ) -> Result<String, InferenceError> {
-        let body = ChatRequest {
-            model: &params.model,
-            messages,
-            temperature: params.temperature,
-            top_p: params.top_p,
-            max_tokens: params.max_tokens,
-            stream: false,
-        };
-        let url = format!("{}/v1/chat/completions", self.base_url);
-        let resp = self
-            .http
-            .post(url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| InferenceError::Transport(e.to_string()))?;
-        if !resp.status().is_success() {
-            return Err(InferenceError::Transport(format!("HTTP {}", resp.status())));
-        }
-        let parsed: ChatResponse = resp
-            .json()
-            .await
-            .map_err(|e| InferenceError::Transport(e.to_string()))?;
+        let req = self
+            .completion(messages, params, false)
+            .timeout(self.timeout);
+        let parsed: ChatResponse = send_ok(req).await?.json().await.map_err(transport)?;
         parsed
             .choices
             .into_iter()
@@ -176,6 +192,50 @@ impl InferenceClient {
             .map(|c| c.message.content)
             .ok_or(InferenceError::EmptyResponse)
     }
+
+    /// Completa un chat en streaming (SSE): llama a `on_token` con cada
+    /// fragmento en orden y devuelve el texto completo al terminar.
+    pub async fn chat_stream<F: FnMut(&str)>(
+        &self,
+        messages: &[Message],
+        params: &SamplingParams,
+        mut on_token: F,
+    ) -> Result<String, InferenceError> {
+        let mut resp = send_ok(self.completion(messages, params, true)).await?;
+        let mut decoder = sse::SseDecoder::default();
+        let mut full = String::new();
+        while let Some(chunk) = resp.chunk().await.map_err(transport)? {
+            for event in decoder.push(&chunk)? {
+                match event {
+                    sse::SseEvent::Delta(text) => {
+                        on_token(&text);
+                        full.push_str(&text);
+                    }
+                    sse::SseEvent::Done => return Ok(full),
+                }
+            }
+        }
+        Ok(full)
+    }
+
+    fn completion(
+        &self,
+        messages: &[Message],
+        params: &SamplingParams,
+        stream: bool,
+    ) -> reqwest::RequestBuilder {
+        let body = ChatRequest::new(messages, params, stream);
+        let url = format!("{}/v1/chat/completions", self.base_url);
+        self.http.post(url).json(&body)
+    }
+}
+
+async fn send_ok(req: reqwest::RequestBuilder) -> Result<reqwest::Response, InferenceError> {
+    let resp = req.send().await.map_err(transport)?;
+    if !resp.status().is_success() {
+        return Err(InferenceError::Transport(format!("HTTP {}", resp.status())));
+    }
+    Ok(resp)
 }
 
 #[cfg(test)]
@@ -206,10 +266,76 @@ mod tests {
     }
 
     #[test]
+    fn grammar_is_sent_only_when_set() {
+        let msgs = [Message::user("x")];
+        let mut params = SamplingParams::default();
+        let without = serde_json::to_value(ChatRequest::new(&msgs, &params, false)).expect("json");
+        assert!(without.get("grammar").is_none());
+        params.grammar = Some("root ::= \"a\"".into());
+        let with = serde_json::to_value(ChatRequest::new(&msgs, &params, true)).expect("json");
+        assert_eq!(with["grammar"], "root ::= \"a\"");
+        assert_eq!(with["stream"], true);
+    }
+
+    #[test]
     fn default_params_match_config_defaults() {
         let p = SamplingParams::default();
         assert_eq!(p.temperature, 0.2);
         assert_eq!(p.top_p, 0.95);
         assert_eq!(p.max_tokens, 4096);
+    }
+
+    /// Servidor HTTP falso que envía `body` en trozos de `chunk` bytes y cierra.
+    async fn fake_sse_server(body: &'static str, chunk: usize) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.expect("accept");
+            let mut req = [0u8; 4096];
+            let _ = sock.read(&mut req).await;
+            let head =
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n";
+            sock.write_all(head.as_bytes()).await.expect("head");
+            for part in body.as_bytes().chunks(chunk) {
+                sock.write_all(part).await.expect("part");
+                sock.flush().await.expect("flush");
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn chat_stream_emits_tokens_in_order_and_returns_full_text() {
+        let body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"def \"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"año\"}}]}\n\n",
+            "data: [DONE]\n\n",
+        );
+        let url = fake_sse_server(body, 7).await;
+        let client = InferenceClient::new(url, Duration::from_secs(5)).expect("build");
+        let mut seen = Vec::new();
+        let full = client
+            .chat_stream(&[Message::user("x")], &SamplingParams::default(), |t| {
+                seen.push(t.to_string())
+            })
+            .await
+            .expect("stream");
+        assert_eq!(seen, vec!["def ", "año"]);
+        assert_eq!(full, "def año");
+    }
+
+    #[tokio::test]
+    async fn chat_stream_propagates_server_error_event() {
+        let body = "data: {\"error\":{\"message\":\"boom\"}}\n\n";
+        let url = fake_sse_server(body, 64).await;
+        let client = InferenceClient::new(url, Duration::from_secs(5)).expect("build");
+        let res = client
+            .chat_stream(&[Message::user("x")], &SamplingParams::default(), |_| {})
+            .await;
+        assert!(matches!(res, Err(InferenceError::Protocol(_))));
     }
 }

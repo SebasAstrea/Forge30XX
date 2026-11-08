@@ -9,6 +9,19 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- Streaming de tokens (RF-18 adelantado a S1, ADR-0003): `InferenceClient::chat_stream`
+  con decodificador SSE propio (sin dependencias nuevas); `forge chat` muestra
+  los tokens según llegan.
+- Gramática GBNF para tool-calls (RF-08): `grammars/tool_calls.gbnf`,
+  `SamplingParams::grammar` y módulo `tool_call` (parser estricto). Test
+  `rf08_tool_calls` contra modelo real: 100% parseables con gramática (Q8_0, 3B).
+- ADR-0003 (streaming en S1) y ADR-0004 (fork TheTom/llama-cpp-turboquant
+  servido por HTTP/OpenAI, sin gRPC).
+
+### Changed
+
+- Timeout de inferencia: total en `chat`, entre trozos en `chat_stream`.
+
 - Inferencia mínima (RF-01, RF-07): módulo `inference` con `InferenceClient`
   (cliente del llama-server vía API OpenAI, reqwest) y `forge chat` como REPL
   real con historial. Sección `[inference]` en la config. Guía `docs/inference.md`.

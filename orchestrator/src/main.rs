@@ -116,17 +116,7 @@ fn cmd_run(_ui: bool) -> Result<()> {
 fn cmd_chat(config_path: &str) -> Result<()> {
     let cfg = Config::load(config_path)?;
     let inf = &cfg.inference;
-    let client = InferenceClient::new(
-        inf.base_url.clone(),
-        std::time::Duration::from_millis(inf.timeout_ms),
-    )?;
-    let params = SamplingParams {
-        model: "local".to_string(),
-        temperature: inf.temperature,
-        top_p: inf.top_p,
-        max_tokens: inf.max_tokens,
-    };
-
+    let (client, params) = build_inference(inf)?;
     let runtime = tokio::runtime::Runtime::new()?;
 
     // Verifica que el llama-server responde antes de abrir el REPL.
@@ -143,25 +133,12 @@ fn cmd_chat(config_path: &str) -> Result<()> {
     let mut history = vec![Message::system(
         "Eres Forge30XX, un asistente de codificación conciso y correcto.",
     )];
-
-    loop {
-        print!("> ");
-        io::stdout().flush()?;
-        let mut line = String::new();
-        if io::stdin().read_line(&mut line)? == 0 {
-            break; // EOF
-        }
-        let prompt = line.trim();
-        if prompt.is_empty() {
-            continue;
-        }
-        if prompt == "exit" || prompt == "quit" {
-            break;
-        }
+    while let Some(prompt) = read_prompt()? {
         history.push(Message::user(prompt));
-        match runtime.block_on(client.chat(&history, &params)) {
+        let turn = client.chat_stream(&history, &params, print_token);
+        match runtime.block_on(turn) {
             Ok(reply) => {
-                println!("{reply}\n");
+                println!("\n");
                 history.push(Message {
                     role: forge::inference::Role::Assistant,
                     content: reply,
@@ -169,12 +146,52 @@ fn cmd_chat(config_path: &str) -> Result<()> {
             }
             Err(e) => {
                 tracing::error!(error = %e, "fallo de inferencia");
-                println!("[error] {e}\n");
+                println!("\n[error] {e}\n");
                 history.pop(); // descarta el turno fallido
             }
         }
     }
     Ok(())
+}
+
+fn build_inference(inf: &forge::config::Inference) -> Result<(InferenceClient, SamplingParams)> {
+    let client = InferenceClient::new(
+        inf.base_url.clone(),
+        std::time::Duration::from_millis(inf.timeout_ms),
+    )?;
+    let params = SamplingParams {
+        model: "local".to_string(),
+        temperature: inf.temperature,
+        top_p: inf.top_p,
+        max_tokens: inf.max_tokens,
+        grammar: None, // chat libre; la gramática de tool-calls se usa en S6
+    };
+    Ok((client, params))
+}
+
+/// Lee la siguiente línea no vacía. `None` en EOF, `exit` o `quit`.
+fn read_prompt() -> Result<Option<String>> {
+    loop {
+        print!("> ");
+        io::stdout().flush()?;
+        let mut line = String::new();
+        if io::stdin().read_line(&mut line)? == 0 {
+            return Ok(None);
+        }
+        match line.trim() {
+            "" => continue,
+            "exit" | "quit" => return Ok(None),
+            prompt => return Ok(Some(prompt.to_string())),
+        }
+    }
+}
+
+fn print_token(token: &str) {
+    let mut out = io::stdout().lock();
+    // Un fallo de stdout no debe abortar la generación; se registra y sigue.
+    if let Err(e) = out.write_all(token.as_bytes()).and_then(|()| out.flush()) {
+        tracing::warn!(error = %e, "no se pudo escribir el token");
+    }
 }
 
 fn cmd_profile(which: &str) -> Result<()> {

@@ -1,0 +1,23 @@
+# Gramática GBNF para tool-calls (RF-08).
+# Fuerza la salida del modelo a: {"name": "<tool>", "arguments": {...}}
+# Debe coincidir con orchestrator/src/tool_call.rs (ToolCall::parse).
+
+root      ::= "{" ws "\"name\"" ws ":" ws toolname ws "," ws "\"arguments\"" ws ":" ws object ws "}"
+
+toolname  ::= "\"" [a-z] [a-z0-9_]{0,63} "\""
+
+value     ::= object | array | string | number | ("true" | "false" | "null")
+
+object    ::= "{" ws ( string ws ":" ws value ws ( "," ws string ws ":" ws value ws )* )? "}"
+
+array     ::= "[" ws ( value ws ( "," ws value ws )* )? "]"
+
+string    ::= "\"" (
+                [^"\\\x7F\x00-\x1F] |
+                "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{4})
+              )* "\""
+
+number    ::= "-"? ("0" | [1-9] [0-9]{0,15}) ("." [0-9]+)? ([eE] [-+]? [0-9]{1,3})?
+
+# Espacio opcional acotado para que el modelo no se quede generando blancos.
+ws        ::= [ \t\n]{0,20}

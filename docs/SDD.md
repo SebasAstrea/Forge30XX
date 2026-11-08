@@ -186,7 +186,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 |---|---|---|---|
 | S0 (1 sem) | Bootstrap | repo, CI, Docker, esqueleto Rust+Python, AGENTS.md, licencia | docker compose up hello world Rust+Python |
 | S0b | Detección hardware | RF-00, RF-00b, RF-21b, HU-00 | doctor imprime A y B correctos en CI |
-| S1 | Inferencia mínima | RF-01, RF-07, RF-08 | Chat 3B (A)/7B (B) vía API OpenAI |
+| S1 | Inferencia mínima | RF-01, RF-07, RF-08, streaming de tokens de RF-18 (ADR-0003) | Chat 3B (A)/7B (B) vía API OpenAI con streaming |
 | S2 | KV Perfil A | RF-05 turbo2, RF-06 KVFlash 4K, HU-03 | 32K en <1.5 GB KV en 3060 6 GB |
 | S3 | KV Perfil B + dual | RF-05 turbo3, RF-06, RF-06b, HU-00b, HU-03b | 64K repartido en 2x3060 |
 | S4 | QLoRA A | RF-03, RF-03b, HU-01 | LoRA 3B <4 h en 6 GB |
@@ -227,9 +227,9 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 
 - ADR-01: Orquestador Rust (Axum+Tokio) por I/O y CPU-bound, latencia predecible, seguridad memoria.
 - ADR-02: ML en Python con PyO3 (sin overhead subprocesos).
-- ADR-03: Inferencia C++/CUDA vía llama.cpp fork (control kernels TurboQuant, KVFlash).
+- ADR-03: Inferencia C++/CUDA vía llama.cpp fork (control kernels TurboQuant, KVFlash). Fork concreto: `TheTom/llama-cpp-turboquant` (ver `adr/0004`).
 - ADR-04: Frontend SvelteKit+TS (bundle pequeño, streaming SSE).
-- ADR-05: HTTP para RAG, gRPC para inferencia (streaming bidireccional).
+- ADR-05: HTTP para RAG. Inferencia también por HTTP (API OpenAI + SSE), no gRPC (modificada por `adr/0004`).
 - ADR-06: Docker Compose + nvidia-container-toolkit.
 - ADR-07: SQLite audit log + JSON sesión (cero deps externas, mono-usuario).
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
@@ -244,7 +244,7 @@ Cualquier ADR nueva o modificación de las existentes requiere aprobación del P
 2. Orquestador: guardarraíl entrada (regex + clasificador Python).
 3. Router contexto: RAG/lectura/resumen.
 4. Prompt con contexto + herramientas.
-5. llama-server gRPC + GBNF.
+5. llama-server HTTP/SSE (API OpenAI) + GBNF.
 6. Streaming tokens → frontend.
 7. Tool-call → guardarraíl salida → aprobación UI si destructiva → ToolExecutor.
 8. Resultado vuelve al modelo (loop hasta respuesta final).
@@ -258,7 +258,7 @@ Cualquier ADR nueva o modificación de las existentes requiere aprobación del P
 Rust 1.80+, Axum 0.7+, Tokio 1.40+, tonic 0.12+, PyO3 0.22+, serde/serde_json, rusqlite 0.31+, clap 4.5+, metrics+metrics-exporter-prometheus, tracing+tracing-subscriber.
 
 ### Inferencia (C++/CUDA)
-llama.cpp fork `atomicmilkshake/llama-cpp-turboquant`, CUDA 12.1+, CMake 3.28+ con -DGGML_CUDA=ON, bindgen FFI o gRPC a llama-server (preferir gRPC).
+llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+ con -DGGML_CUDA=ON, llama-server vía HTTP/API OpenAI.
 
 ### ML (Python)
 Python 3.11+, PyTorch 2.4+, Unsloth 2024.10+, PEFT 0.13+, bitsandbytes 0.44+, FlagEmbedding (bge-m3) vía Ollama, ModernBERT fine-tuned o Qwen3Guard-Gen-0.6B para guard, ChromaDB, pytest+pytest-cov+hypothesis, ruff+mypy.

@@ -9,6 +9,7 @@ pub mod config;
 pub mod hardware;
 pub mod inference;
 pub mod rag;
+pub mod tool_call;
 
 /// Error raíz de la librería del orquestador.
 #[derive(Debug, thiserror::Error)]
