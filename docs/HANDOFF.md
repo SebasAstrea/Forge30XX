@@ -1,14 +1,28 @@
 # Handoff — estado del proyecto para otros agentes/sesiones
 
-Última actualización: 2026-11-08. Commit cabeza: `0cdf78d` (en `origin/main`).
+Última actualización: 2026-11-08. Ver `git log` para el commit cabeza en `origin/main`.
 
 > Lectura obligatoria antes de tocar código: `docs/SDD.md`, `AGENTS.md`,
 > `docs/adr/`, luego este archivo. PO: **Sebastia M.** (decisiones críticas,
 > SDD §0 / AGENTS.md 11.0).
 
+## Retomar en otro equipo
+
+- `python/.venv`, `frontend/node_modules` y `orchestrator/target` no están en
+  git. Recrear: `python -m venv python/.venv` + `pip install -e "python[dev]"`;
+  `cd frontend; npm ci`; `cd orchestrator; cargo build`.
+- El fork TurboQuant y los GGUF están fuera del repo (Downloads del equipo
+  original). Clonar `https://github.com/TheTom/llama-cpp-turboquant` (rama
+  `feature/turboquant-kv-cache`, commit `643956891`).
+- **Pendiente de respuesta del PO para S2**: entorno de compilación CUDA
+  (A: VS 2022 Build Tools en Windows; B: cmake/g++/CUDA toolkit en WSL2,
+  recomendada) y qué cubre KVFlash (RF-06), que no existe en el fork.
+
 ## Commits de referencia
 
 ```
+d170ea6 feat(RF-08): streaming SSE en forge chat y gramatica GBNF para tool-calls
+bf75c24 fix(build): verificar capas python y frontend (mypy strict, lockfile, prettierignore)
 0cdf78d feat(RF-07): inferencia minima via llama-server y transporte HTTP del RAG
 2e68563 test(RF-00): verificacion en verde y fix de dev-dependency figment
 a29218c feat(RF-00): deteccion de hardware y forge doctor (S0b)
