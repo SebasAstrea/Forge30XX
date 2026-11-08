@@ -80,7 +80,10 @@ mod tests {
 
     #[test]
     fn env_overrides_file_port() {
-        figment::Jail::expect_with(|jail| {
+        // El tipo de retorno del closure lo impone figment::Jail::expect_with
+        // (Result<_, figment::Error>); no controlamos su tamaño, de ahí el allow.
+        #[allow(clippy::result_large_err)]
+        fn body(jail: &mut figment::Jail) -> Result<(), figment::Error> {
             jail.create_file(
                 "forge.config.toml",
                 r#"
@@ -103,6 +106,7 @@ mod tests {
             assert_eq!(cfg.context_router.rag_threshold_tokens, 1500);
             assert_eq!(cfg.rag.timeout_ms, 5_000);
             Ok(())
-        });
+        }
+        figment::Jail::expect_with(body);
     }
 }

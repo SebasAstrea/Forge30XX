@@ -33,6 +33,7 @@ anyhow = "1"
 
 [dev-dependencies]
 proptest = "1"
+figment = { version = "0.10", features = ["toml", "env", "test"] }
 
 [profile.release]
 lto = true

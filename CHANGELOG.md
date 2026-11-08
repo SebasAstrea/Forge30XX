@@ -14,6 +14,13 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   matriz SDD §2), `parse_nvidia_smi` y `detect`; el comando imprime perfil,
   modelo, contexto, cuantización KV, ventana KVFlash y avisos (TGP<100W,
   GPU no-30xx). Guía `docs/hardware-detection.md`. 10 tests unitarios.
+  Verificado en hardware real (RTX 3050 6GB → perfil A, aviso TGP 65W, 64 ms)
+  y con `cargo fmt/clippy -D warnings/test` en verde (14 tests).
+
+### Fixed
+
+- `figment` habilitado con feature `test` en dev-dependencies (necesaria para
+  `figment::Jail` en los tests de configuración).
 
 - Estructura de directorios del repositorio (Sprint S0 — Bootstrap).
 - `docs/SDD.md`: spec movido a `docs/` (antes `SDD_DOC.md`).

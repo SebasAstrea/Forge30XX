@@ -81,7 +81,10 @@ fn cmd_doctor(config_path: &str) -> Result<()> {
     }
 
     let elapsed = started.elapsed();
-    println!("\nDiagnóstico completado en {} ms (objetivo RF-00: <3000 ms).", elapsed.as_millis());
+    println!(
+        "\nDiagnóstico completado en {} ms (objetivo RF-00: <3000 ms).",
+        elapsed.as_millis()
+    );
     Ok(())
 }
 

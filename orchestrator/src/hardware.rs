@@ -32,8 +32,12 @@ impl Gpu {
     /// `true` si el modelo pertenece a la serie 30xx (Ampere), único soportado.
     fn is_ampere_30xx(&self) -> bool {
         let n = self.name.to_ascii_lowercase();
-        n.contains("rtx 30") || n.contains("rtx30") || n.contains(" 3060")
-            || n.contains(" 3070") || n.contains(" 3080") || n.contains(" 3090")
+        n.contains("rtx 30")
+            || n.contains("rtx30")
+            || n.contains(" 3060")
+            || n.contains(" 3070")
+            || n.contains(" 3080")
+            || n.contains(" 3090")
     }
 }
 
