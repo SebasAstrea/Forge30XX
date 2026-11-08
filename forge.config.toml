@@ -13,6 +13,7 @@ quantization = "turbo2"    # turbo2, turbo3, turbo4
 kvflash_window = 4096      # 4096 (A), 8192 (B)
 
 [inference]
+base_url = "http://127.0.0.1:8080"
 temperature = 0.2
 top_p = 0.95
 max_tokens = 4096

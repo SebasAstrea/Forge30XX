@@ -7,6 +7,7 @@
 
 pub mod config;
 pub mod hardware;
+pub mod inference;
 pub mod rag;
 
 /// Error raíz de la librería del orquestador.

@@ -48,6 +48,31 @@ fn default_rag_timeout_ms() -> u64 {
     5_000
 }
 
+/// Configuración de inferencia (RF-07). Apunta al llama-server externo.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Inference {
+    /// URL base del llama-server (API OpenAI).
+    #[serde(default = "default_inference_url")]
+    pub base_url: String,
+    /// Temperatura de muestreo.
+    pub temperature: f32,
+    /// Top-p (núcleo de probabilidad).
+    pub top_p: f32,
+    /// Máximo de tokens a generar.
+    pub max_tokens: u32,
+    /// Timeout de las peticiones en milisegundos.
+    #[serde(default = "default_inference_timeout_ms")]
+    pub timeout_ms: u64,
+}
+
+fn default_inference_url() -> String {
+    "http://127.0.0.1:8080".to_string()
+}
+
+fn default_inference_timeout_ms() -> u64 {
+    120_000
+}
+
 /// Configuración raíz de Forge30XX.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -59,6 +84,8 @@ pub struct Config {
     pub context_router: ContextRouter,
     /// Servicio RAG externo.
     pub rag: Rag,
+    /// Inferencia (llama-server).
+    pub inference: Inference,
 }
 
 impl Config {
@@ -97,6 +124,10 @@ mod tests {
                 summarize_at_percent = 70
                 [rag]
                 base_url = "http://localhost:8765"
+                [inference]
+                temperature = 0.2
+                top_p = 0.95
+                max_tokens = 4096
                 "#,
             )?;
             jail.set_env("FORGE_UI__PORT", "9000");
@@ -105,6 +136,8 @@ mod tests {
             assert_eq!(cfg.hardware.profile, "auto");
             assert_eq!(cfg.context_router.rag_threshold_tokens, 1500);
             assert_eq!(cfg.rag.timeout_ms, 5_000);
+            assert_eq!(cfg.inference.base_url, "http://127.0.0.1:8080");
+            assert_eq!(cfg.inference.max_tokens, 4096);
             Ok(())
         }
         figment::Jail::expect_with(body);

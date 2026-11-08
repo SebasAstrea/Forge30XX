@@ -9,6 +9,14 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- Inferencia mínima (RF-01, RF-07): módulo `inference` con `InferenceClient`
+  (cliente del llama-server vía API OpenAI, reqwest) y `forge chat` como REPL
+  real con historial. Sección `[inference]` en la config. Guía `docs/inference.md`.
+  Verificado end-to-end contra llama-server (Qwen2.5-Coder-3B) en RTX 3050 6GB.
+- Transporte HTTP del RAG en Rust (ADR-0002 aprobada): `rag::RagClient`
+  (`health`, `route`, `query`) con `reqwest` sin TLS. Añadida dependencia
+  `reqwest` al orquestador.
+
 - Detección de hardware y `forge doctor` (RF-00, RF-21b, HU-00): módulo
   `hardware` con `recommend` (lógica pura de selección de perfil según la
   matriz SDD §2), `parse_nvidia_smi` y `detect`; el comando imprime perfil,

@@ -30,6 +30,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 thiserror = "1"
 anyhow = "1"
+# Cliente HTTP para el RAG (ADR-0002) y el llama-server (S1). Sin TLS: solo
+# hablamos con servicios locales/de la red interna de Compose (RNF-06).
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [dev-dependencies]
 proptest = "1"

@@ -1,7 +1,7 @@
 # ADR-0002: Cliente HTTP en Rust para consumir el servicio RAG
 
-- **Estado**: Propuesta (requiere aprobación del PO — AGENTS.md 11.1, 11.11)
-- **Fecha**: 2026-11-07
+- **Estado**: Aceptada
+- **Fecha**: 2026-11-07 (aprobada 2026-11-08 por el PO)
 - **Decisor (PO)**: Sebastia M.
 - **Issue relacionada**: RF-14, RF-15 (Sprint S7). Depende de ADR-0001.
 
@@ -71,8 +71,8 @@ Impacto: no altera RF/RNF ni umbrales. Afecta solo a la implementación de
 RF-14/RF-15 en el orquestador (Sprint S7). Si el PO rechaza `reqwest`, la
 alternativa de menor fricción es B (hyper directo) a costa de más código propio.
 
-## Pendiente de aprobación
+## Aprobación
 
-Bloquea la tarea de implementar el cliente HTTP del RAG en Rust hasta respuesta
-del PO. Al aprobarse: cambiar estado a "Aceptada", añadir la dependencia a
-`orchestrator/Cargo.toml` y actualizar el CHANGELOG.
+Aprobada por el PO (Sebastia M.) el 2026-11-08. Se añade `reqwest` (sin TLS,
+feature `json`) a `orchestrator/Cargo.toml` y se implementa el cliente HTTP del
+RAG en el módulo `rag`.
