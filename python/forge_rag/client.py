@@ -7,6 +7,7 @@ upstream `rag/server.py` (endpoints /health, /methodology, /query, /route).
 
 from __future__ import annotations
 
+import json
 import logging
 import urllib.error
 import urllib.request
@@ -15,6 +16,18 @@ from dataclasses import dataclass
 logger = logging.getLogger("forge_rag.client")
 
 _JSON = "application/json"
+
+
+def _as_list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _as_float(value: object, default: float) -> float:
+    return float(value) if isinstance(value, int | float | str) else default
+
+
+def _as_int(value: object, default: int) -> int:
+    return int(value) if isinstance(value, int | float | str) else default
 
 
 class RagError(Exception):
@@ -80,12 +93,12 @@ class RagClient:
             "compact": True,
         }
         data = self._post("/route", body)
-        reads = data.get("read", [])
-        paths = [r["path"] for r in reads if isinstance(r, dict) and "path" in r]
+        reads = _as_list(data.get("read"))
+        paths = [str(r["path"]) for r in reads if isinstance(r, dict) and "path" in r]
         return RouteDecision(
             action=str(data.get("action", "direct")),
-            conf=float(data.get("conf", 0.0)),
-            save=int(data.get("save", 0)),
+            conf=_as_float(data.get("conf"), 0.0),
+            save=_as_int(data.get("save"), 0),
             read=paths,
         )
 
@@ -109,19 +122,15 @@ class RagClient:
         if file_glob is not None:
             body["file_glob"] = file_glob
         data = self._post("/query", body)
-        results = data.get("results", [])
-        hits: list[QueryHit] = []
-        for r in results:
-            if not isinstance(r, dict):
-                continue
-            hits.append(
-                QueryHit(
-                    path=str(r.get("path", "")),
-                    score=float(r.get("score", 0.0)),
-                    text=str(r.get("text", "")),
-                )
+        return [
+            QueryHit(
+                path=str(r.get("path", "")),
+                score=_as_float(r.get("score"), 0.0),
+                text=str(r.get("text", "")),
             )
-        return hits
+            for r in _as_list(data.get("results"))
+            if isinstance(r, dict)
+        ]
 
     def _get(self, path: str) -> dict[str, object]:
         return self._request("GET", path, None)
@@ -129,11 +138,7 @@ class RagClient:
     def _post(self, path: str, body: dict[str, object]) -> dict[str, object]:
         return self._request("POST", path, body)
 
-    def _request(
-        self, method: str, path: str, body: dict[str, object] | None
-    ) -> dict[str, object]:
-        import json
-
+    def _request(self, method: str, path: str, body: dict[str, object] | None) -> dict[str, object]:
         url = f"{self._base}{path}"
         data = json.dumps(body).encode("utf-8") if body is not None else None
         req = urllib.request.Request(url, data=data, method=method)

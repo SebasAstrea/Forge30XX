@@ -70,10 +70,18 @@ d3732ce feat(bootstrap): scaffold repo, Makefile/CI, esqueletos y RAG externo
       disponible y lo que exige RF-07). Antes de S2 hay que decidir: integrar el
       fork TurboQuant (necesario para RF-05/RF-06) y si inferencia migra a gRPC
       o se queda en HTTP. Abrir issue `decision:po`.
-- [ ] `python/` sin ejecutar en CI con deps reales: falta `pip install -e .[dev]`
-      verificado (pytest/ruff/mypy). Los tests de `forge_rag` pasan con un
-      servidor falso local (probado manualmente, no en CI aún).
-- [ ] `frontend/` sin `package-lock.json` ni `npm ci` ejecutado.
+- [x] `python/`: `pip install -e .[dev]` verificado en venv local (Python 3.13).
+      `ruff format`, `ruff check`, `mypy --strict` y `pytest` (6 tests, 93%
+      cobertura) en verde. Se corrigieron 7 errores de `mypy --strict` en
+      `forge_rag`. Falta confirmarlo en GitHub Actions (Python 3.11).
+- [x] `frontend/`: `package-lock.json` generado; `npm ci`, prettier, eslint,
+      svelte-check, vitest (`--passWithNoTests`, aún sin tests) y `vite build`
+      en verde. Añadido `.prettierignore` (`.svelte-kit/` generado rompía
+      `format:check`).
+- [ ] `frontend/`: `@sveltejs/vite-plugin-svelte@3` avisa de que el soporte de
+      Svelte 5 está en la v4+. Subir de versión es cambio de stack → PO.
+- [ ] `frontend/eslint.config.js` importa `@eslint/js`, que no está declarado en
+      `package.json` (funciona por ser dependencia transitiva de `eslint`).
 - [ ] `inference/CMakeLists.txt` es un stub; no compila kernels todavía.
 - [ ] CI de hardware (`ci-hardware.yml`) requiere runners self-hosted con GPU
       que aún no existen; no se ha ejecutado.

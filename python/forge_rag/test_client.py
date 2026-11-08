@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -27,7 +27,7 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, *_: object) -> None:  # silencia el log del server
         pass
 
-    def _send(self, payload: dict[str, object]) -> None:
+    def _send(self, payload: Mapping[str, object]) -> None:
         body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -59,9 +59,8 @@ def rag_url() -> Iterator[str]:
     server = HTTPServer(("127.0.0.1", 0), _Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    host, port = server.server_address
     try:
-        yield f"http://{host}:{port}"
+        yield f"http://127.0.0.1:{server.server_port}"
     finally:
         server.shutdown()
         server.server_close()
