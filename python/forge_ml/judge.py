@@ -1,14 +1,13 @@
-"""LLM-juez de calidad para cambios de caché KV (AGENTS.md 11.5, ADR-0009).
+"""LLM-juez de calidad para cambios de caché KV (AGENTS.md 11.5, ADR-0009/0010).
 
 Flujo en dos pasos:
 
-1. ``generate``: el llama-server responde 50 tareas (archivos de código x
-   preguntas) con una configuración KV. Se ejecuta una vez con la referencia
-   (f16/f16) y otra con la candidata (p. ej. f16/turbo3).
+1. ``generate``: el llama-server, arrancado con la configuración KV a evaluar,
+   responde las tareas (archivos de código x preguntas). Cada respuesta se
+   guarda junto con el código que vio el modelo.
 2. ``score``: un modelo externo, vía el CLI de opencode, puntúa de 1 a 5 cada
-   respuesta candidata frente a la de referencia. Umbral: media >= 4.
-
-El juez solo recibe la pregunta y las dos respuestas, no el código fuente.
+   respuesta por sí sola, viendo el código. Aprueba con media >= 4 sobre al
+   menos 25 tareas.
 """
 
 from __future__ import annotations
@@ -37,25 +36,29 @@ QUESTIONS: tuple[str, ...] = (
 
 DEFAULT_JUDGE_CMD: tuple[str, ...] = ("opencode", "run", "--agent", "plan", "--format", "json")
 DEFAULT_MODEL = "opencode/deepseek-v4.1-flash-free"
+# AGENTS.md 11.5 (ADR-0010): tareas mínimas por perfil para dar por válida la nota.
+MIN_TASKS = 25
 _SEED = 42
 # Esperas entre reintentos del juez (los modelos gratuitos limitan la tasa).
 _RETRY_DELAYS_S: tuple[float, ...] = (30.0, 120.0)
 _JUDGE_TIMEOUT_S = 300
 
-_JUDGE_PROMPT = """Eres un evaluador de asistentes de código. Compara la RESPUESTA
-CANDIDATA con la RESPUESTA DE REFERENCIA a la misma pregunta sobre un archivo de
-código. Puntúa la candidata de 1 a 5: 5 = igual de correcta y completa que la
-referencia (o mejor); 4 = diferencias menores sin errores; 3 = omite partes
-importantes; 2 = errores relevantes; 1 = incorrecta o incoherente.
+_JUDGE_PROMPT = """Eres un evaluador de asistentes de código. Lee el CÓDIGO, la
+PREGUNTA sobre él y la RESPUESTA del asistente. Puntúa la respuesta de 1 a 5:
+5 = correcta, completa y específica de este código; 4 = correcta con omisiones
+menores; 3 = parcialmente correcta o genérica; 2 = errores relevantes;
+1 = incorrecta o incoherente.
 No uses herramientas. Responde SOLO con JSON: {{"score": <1-5>, "reason": "<breve>"}}
+
+CÓDIGO:
+```
+{context}
+```
 
 PREGUNTA: {question}
 
-RESPUESTA DE REFERENCIA:
-{reference}
-
-RESPUESTA CANDIDATA:
-{candidate}
+RESPUESTA:
+{answer}
 """
 
 
@@ -78,6 +81,7 @@ class Answer:
 
     task_id: str
     question: str
+    context: str
     text: str
 
 
@@ -140,7 +144,8 @@ def generate(tasks: Sequence[Task], url: str, out: Path, max_tokens: int) -> Non
     """Responde cada tarea con el llama-server y guarda las respuestas en JSONL."""
     with out.open("w", encoding="utf-8") as fh:
         for n, task in enumerate(tasks, 1):
-            answer = Answer(task.task_id, task.question, _chat(url, task, max_tokens))
+            text = _chat(url, task, max_tokens)
+            answer = Answer(task.task_id, task.question, task.context, text)
             fh.write(json.dumps(asdict(answer), ensure_ascii=False) + "\n")
             logger.info("generada %d/%d: %s", n, len(tasks), task.task_id)
 
@@ -201,22 +206,25 @@ def _ask_judge(judge_cmd: Sequence[str], model: str, prompt: str) -> str:
     return _event_text(proc.stdout)
 
 
+def judge_prompt(answer: Answer) -> str:
+    """Prompt de puntuación absoluta: código, pregunta y respuesta."""
+    return _JUDGE_PROMPT.format(
+        context=answer.context, question=answer.question, answer=answer.text
+    )
+
+
 def _verdict(
-    judge_cmd: Sequence[str],
-    model: str,
-    pair: tuple[Answer, Answer],
-    retry_delays: Sequence[float],
+    judge_cmd: Sequence[str], model: str, answer: Answer, retry_delays: Sequence[float]
 ) -> Verdict:
-    ref, cand = pair
-    prompt = _JUDGE_PROMPT.format(question=ref.question, reference=ref.text, candidate=cand.text)
+    prompt = judge_prompt(answer)
     for attempt, delay in enumerate([*retry_delays, None], 1):
         try:
             text = _ask_judge(judge_cmd, model, prompt)
-            return Verdict(ref.task_id, parse_score(text), _reason(text))
+            return Verdict(answer.task_id, parse_score(text), _reason(text))
         except (JudgeError, subprocess.TimeoutExpired) as e:
-            logger.warning("juez %s intento %d: %s", ref.task_id, attempt, e)
+            logger.warning("juez %s intento %d: %s", answer.task_id, attempt, e)
             if delay is None:
-                raise JudgeError(f"{ref.task_id}: {e}") from e
+                raise JudgeError(f"{answer.task_id}: {e}") from e
             time.sleep(delay)
     raise JudgeError("inalcanzable")
 
@@ -237,35 +245,33 @@ def _load_cache(cache: Path | None) -> dict[str, Verdict]:
 
 
 def score(
-    reference: dict[str, Answer],
-    candidate: dict[str, Answer],
+    answers: dict[str, Answer],
     judge_cmd: Sequence[str],
     model: str,
     threshold: float,
+    min_tasks: int = MIN_TASKS,
     cache: Path | None = None,
     retry_delays: Sequence[float] = _RETRY_DELAYS_S,
 ) -> Report:
-    """Puntúa cada respuesta candidata frente a la de referencia.
+    """Puntúa cada respuesta por sí sola; aprueba con media >= `threshold`.
 
-    Con `cache`, cada veredicto se añade al JSONL al obtenerse y los ya
-    presentes no se vuelven a pedir: una ejecución interrumpida se reanuda.
+    Con menos de `min_tasks` respuestas no aprueba. Con `cache`, cada veredicto
+    se añade al JSONL al obtenerse y los ya presentes no se vuelven a pedir.
     """
-    if set(reference) != set(candidate):
-        raise JudgeError("referencia y candidata no cubren las mismas tareas")
     done = _load_cache(cache)
     verdicts = []
-    for n, task_id in enumerate(sorted(reference), 1):
+    for n, task_id in enumerate(sorted(answers), 1):
         v = done.get(task_id)
         if v is None:
-            pair = (reference[task_id], candidate[task_id])
-            v = _verdict(judge_cmd, model, pair, retry_delays)
+            v = _verdict(judge_cmd, model, answers[task_id], retry_delays)
             if cache is not None:
                 with cache.open("a", encoding="utf-8") as fh:
                     fh.write(json.dumps(asdict(v), ensure_ascii=False) + "\n")
-        logger.info("juzgada %d/%d: %s -> %d", n, len(reference), task_id, v.score)
+        logger.info("juzgada %d/%d: %s -> %d", n, len(answers), task_id, v.score)
         verdicts.append(v)
-    mean = sum(v.score for v in verdicts) / len(verdicts)
-    return Report(model, mean, threshold, mean >= threshold, tuple(verdicts))
+    mean = sum(v.score for v in verdicts) / max(len(verdicts), 1)
+    passed = len(verdicts) >= min_tasks and mean >= threshold
+    return Report(model, mean, threshold, passed, tuple(verdicts))
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -277,12 +283,12 @@ def _parser() -> argparse.ArgumentParser:
     gen.add_argument("--context", type=Path, nargs="+", required=True)
     gen.add_argument("--max-chars", type=int, default=48_000)
     gen.add_argument("--max-tokens", type=int, default=384)
-    sc = sub.add_parser("score", help="puntuar candidata frente a referencia")
-    sc.add_argument("--reference", type=Path, required=True)
-    sc.add_argument("--candidate", type=Path, required=True)
+    sc = sub.add_parser("score", help="puntuar las respuestas de `generate`")
+    sc.add_argument("--answers", type=Path, required=True)
     sc.add_argument("--out", type=Path, required=True)
     sc.add_argument("--model", default=DEFAULT_MODEL)
     sc.add_argument("--threshold", type=float, default=4.0)
+    sc.add_argument("--min-tasks", type=int, default=MIN_TASKS)
     sc.add_argument("--cache", type=Path, help="JSONL de veredictos para reanudar")
     sc.add_argument("--judge-cmd", nargs="+", default=list(DEFAULT_JUDGE_CMD))
     return parser
@@ -296,8 +302,8 @@ def main(argv: list[str] | None = None) -> int:
         tasks = build_tasks(args.context, args.max_chars)
         generate(tasks, args.url, args.out, args.max_tokens)
         return 0
-    ref, cand = load_answers(args.reference), load_answers(args.candidate)
-    report = score(ref, cand, args.judge_cmd, args.model, args.threshold, args.cache)
+    answers = load_answers(args.answers)
+    report = score(answers, args.judge_cmd, args.model, args.threshold, args.min_tasks, args.cache)
     args.out.write_text(json.dumps(asdict(report), ensure_ascii=False, indent=2), encoding="utf-8")
     logger.info("media %.2f (umbral %.1f): %s", report.mean, report.threshold, report.passed)
     return 0 if report.passed else 1

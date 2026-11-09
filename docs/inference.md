@@ -184,18 +184,23 @@ cada combinación se compara con `--kl-divergence-base base.bin --kl-divergence`
 | q8_0 / turbo3 | 2.358 | 0.0056 | 98.10% |
 | f16 / turbo2 | 2.369 | 0.0131 | 96.80% |
 
-El LLM-juez de AGENTS.md 11.5 (≥4/5 en 50 prompts) usa opencode (ADR-0009):
+El LLM-juez de AGENTS.md 11.5 (≥4/5 en 25 prompts) usa opencode y puntúa cada
+respuesta por sí sola, viendo el código (ADR-0009, ADR-0010):
 
 ```bash
-# 1. Respuestas con la referencia y con la candidata (servidor del fork en :8080)
-PYTHONPATH=python python -m forge_ml.judge generate --out ref.jsonl --context <archivos...>
-PYTHONPATH=python python -m forge_ml.judge generate --out cand.jsonl --context <archivos...>
-# 2. Puntuación (reanudable con --cache)
-PYTHONPATH=python python -m forge_ml.judge score --reference ref.jsonl \
-  --candidate cand.jsonl --cache verdicts.jsonl --out report.json
+# 1. Respuestas con la configuración KV a evaluar (servidor del fork en :8080).
+#    5 archivos x 5 preguntas = 25 tareas; el código se guarda con cada respuesta.
+PYTHONPATH=python python -m forge_ml.judge generate --out cand.jsonl --context <5 archivos>
+# 2. Puntuación (reanudable con --cache; no aprueba con menos de 25 tareas)
+PYTHONPATH=python python -m forge_ml.judge score --answers cand.jsonl \
+  --cache verdicts.jsonl --out report.json
 ```
 
-Estado: sin completar. Ver los problemas de cuota y calibración en ADR-0009.
+Si la nota sale baja, puntúa también las respuestas f16/f16 de las mismas
+tareas, para separar el efecto de la caché KV del límite del modelo base.
+
+Estado: respuestas generadas el 2026-11-09; puntuación pendiente de que se
+renueve la cuota gratuita de opencode.
 
 ## Aceptación de HU-03 / HU-03b con el contexto lleno
 

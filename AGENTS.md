@@ -100,7 +100,7 @@ Prohibido: improvisar decisiones de arquitectura, asumir stack, añadir/quitar R
 
 - Todo cambio en rutas calientes (router, inferencia, KV management) requiere benchmark en A y B.
 - Regresión >5% en tok/s o >10% en latencia p95 bloquea merge.
-- Cambios en cuantización KV requieren test de calidad (LLM-juez ≥4/5 en 50 prompts) además de benchmark.
+- Cambios en cuantización KV requieren test de calidad (LLM-juez ≥4/5 en 25 prompts, ADR-0010) además de benchmark.
 
 ### 11.6 Reglas de compatibilidad
 
