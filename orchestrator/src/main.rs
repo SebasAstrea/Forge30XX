@@ -99,6 +99,7 @@ fn print_recommendation(rec: &Recommendation) {
     println!("  Modelo         : {}", rec.model);
     println!("  Contexto       : {} tokens", rec.context_tokens);
     println!("  Caché KV (K/V) : {} / {}", rec.kv_type_k, rec.kv_type_v);
+    println!("  llama-server   : {}", rec.llama_server_args().join(" "));
     if rec.warnings.is_empty() {
         println!("  Avisos         : ninguno");
     } else {

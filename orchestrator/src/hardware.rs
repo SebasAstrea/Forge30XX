@@ -7,7 +7,11 @@
 //!
 //! Matriz de referencia: docs/SDD.md §2.
 
-use std::process::Command;
+mod nvidia_smi;
+mod pcie;
+
+pub use nvidia_smi::parse_nvidia_smi;
+pub use pcie::PcieLink;
 
 /// Umbral de TGP por debajo del cual se avisa al usuario (SDD RF-21b).
 const LOW_TGP_WATTS: u32 = 100;
@@ -21,6 +25,8 @@ pub struct Gpu {
     pub vram_mib: u32,
     /// Potencia máxima (TGP) en vatios, si el driver la reporta.
     pub power_limit_w: Option<u32>,
+    /// Enlace PCIe (generación máxima, ancho actual), si el driver lo reporta (RF-06b).
+    pub pcie: Option<PcieLink>,
 }
 
 impl Gpu {
@@ -81,6 +87,33 @@ pub struct Recommendation {
     pub kv_type_v: String,
     /// Avisos para el usuario (p. ej. TGP bajo, GPU no soportada).
     pub warnings: Vec<String>,
+}
+
+impl Recommendation {
+    /// Flags del llama-server del fork para esta recomendación (sin `-m`).
+    ///
+    /// Todas las capas en GPU; con varias GPUs, llama.cpp reparte capas y su KV
+    /// según la VRAM libre (`-sm layer`), que rinde igual que el mejor `-ts`
+    /// medido (docs/inference.md, RF-06b).
+    pub fn llama_server_args(&self) -> Vec<String> {
+        let ctx = self.context_tokens.to_string();
+        [
+            "-c",
+            &ctx,
+            "-ngl",
+            "99",
+            "-fa",
+            "on",
+            "-np",
+            "1",
+            "-ctk",
+            &self.kv_type_k,
+            "-ctv",
+            &self.kv_type_v,
+        ]
+        .map(str::to_string)
+        .to_vec()
+    }
 }
 
 /// Error de detección de hardware.
@@ -175,10 +208,10 @@ fn select_tier(vram_gib: u32, dual: bool) -> &'static Tier {
     }
 }
 
-/// Avisos por GPU: arquitectura no soportada o TGP por debajo del KPI.
+/// Avisos por GPU: arquitectura no soportada, TGP bajo o PCIe estrecho.
 fn gpu_warnings(gpus: &[Gpu]) -> Vec<String> {
     let mut warnings = Vec::new();
-    for g in gpus {
+    for (i, g) in gpus.iter().enumerate() {
         if !g.is_ampere_30xx() {
             warnings.push(format!(
                 "GPU '{}' no es serie 30xx; soporte no garantizado (v1.0 solo Ampere 30xx)",
@@ -191,6 +224,7 @@ fn gpu_warnings(gpus: &[Gpu]) -> Vec<String> {
                 g.name, w, LOW_TGP_WATTS
             ));
         }
+        warnings.extend(g.pcie.and_then(|link| pcie::link_warning(i, link)));
     }
     warnings
 }
@@ -199,48 +233,7 @@ fn gpu_warnings(gpus: &[Gpu]) -> Vec<String> {
 ///
 /// Toca el sistema: solo se ejercita con GPU real (CI hardware).
 pub fn detect() -> Result<Recommendation, HardwareError> {
-    let output = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=name,memory.total,power.max_limit",
-            "--format=csv,noheader,nounits",
-        ])
-        .output()
-        .map_err(|e| HardwareError::NvidiaSmi(e.to_string()))?;
-
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr).to_string();
-        return Err(HardwareError::NvidiaSmi(err));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let gpus = parse_nvidia_smi(&stdout);
-    recommend(&gpus)
-}
-
-/// Parsea la salida CSV de `nvidia-smi` (name, memory.total, power.max_limit).
-///
-/// Pura y testeable con muestras reales de salida.
-pub fn parse_nvidia_smi(csv: &str) -> Vec<Gpu> {
-    csv.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
-                return None;
-            }
-            let mut cols = line.split(',').map(str::trim);
-            let name = cols.next()?.to_string();
-            let vram_mib = cols.next()?.parse::<u32>().ok()?;
-            let power_limit_w = cols
-                .next()
-                .and_then(|v| v.split('.').next())
-                .and_then(|v| v.trim().parse::<u32>().ok());
-            Some(Gpu {
-                name,
-                vram_mib,
-                power_limit_w,
-            })
-        })
-        .collect()
+    recommend(&nvidia_smi::query()?)
 }
 
 #[cfg(test)]
@@ -252,7 +245,63 @@ mod tests {
             name: name.to_string(),
             vram_mib,
             power_limit_w: tgp,
+            pcie: None,
         }
+    }
+
+    fn with_link(mut g: Gpu, gen: u8, width: u8) -> Gpu {
+        g.pcie = Some(PcieLink { gen, width });
+        g
+    }
+
+    #[test]
+    fn llama_server_args_match_profile() {
+        let rec = recommend(&[
+            gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)),
+            gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)),
+        ])
+        .expect("rec");
+        assert_eq!(
+            rec.llama_server_args().join(" "),
+            "-c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3"
+        );
+    }
+
+    #[test]
+    fn narrow_pcie_link_warns_with_bandwidth() {
+        // Caso real de warmachine: GPU0 en Gen3 x1, GPU1 en Gen4 x16.
+        let rec = recommend(&[
+            with_link(gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)), 3, 1),
+            with_link(gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)), 4, 16),
+        ])
+        .expect("rec");
+        let pcie: Vec<_> = rec.warnings.iter().filter(|w| w.contains("PCIe")).collect();
+        assert_eq!(pcie.len(), 1, "{:?}", rec.warnings);
+        assert!(pcie[0].contains("GPU 0") && pcie[0].contains("Gen3 x1"));
+        assert!(pcie[0].contains("1.0 GB/s"));
+    }
+
+    #[test]
+    fn x8_link_does_not_warn() {
+        let g = with_link(gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)), 3, 8);
+        let rec = recommend(&[g]).expect("rec");
+        assert!(rec.warnings.is_empty(), "{:?}", rec.warnings);
+    }
+
+    #[test]
+    fn link_bandwidth_per_generation() {
+        assert_eq!(PcieLink { gen: 4, width: 16 }.bandwidth_gbps(), 31.5);
+        assert_eq!(PcieLink { gen: 3, width: 4 }.bandwidth_gbps(), 3.9);
+        assert_eq!(PcieLink { gen: 1, width: 1 }.bandwidth_gbps(), 0.3);
+    }
+
+    #[test]
+    fn parses_nvidia_smi_pcie_columns() {
+        let csv = "NVIDIA GeForce RTX 3060, 12288, 170.00, 3, 1\n\
+                   NVIDIA GeForce RTX 3060, 12288, 170.00, [N/A], [N/A]\n";
+        let gpus = parse_nvidia_smi(csv);
+        assert_eq!(gpus[0].pcie, Some(PcieLink { gen: 3, width: 1 }));
+        assert_eq!(gpus[1].pcie, None);
     }
 
     #[test]
@@ -316,25 +365,5 @@ mod tests {
     #[test]
     fn no_gpu_is_error() {
         assert!(matches!(recommend(&[]), Err(HardwareError::NoGpu)));
-    }
-
-    #[test]
-    fn parses_nvidia_smi_csv() {
-        let csv = "NVIDIA GeForce RTX 3060 Laptop GPU, 6144, 80\n\
-                   NVIDIA GeForce RTX 3060, 12288, 170.00\n";
-        let gpus = parse_nvidia_smi(csv);
-        assert_eq!(gpus.len(), 2);
-        assert_eq!(gpus[0].vram_mib, 6144);
-        assert_eq!(gpus[0].power_limit_w, Some(80));
-        assert_eq!(gpus[1].power_limit_w, Some(170));
-    }
-
-    #[test]
-    fn parses_nvidia_smi_without_power() {
-        // power.max_limit puede venir como "[N/A]" en algunos portátiles.
-        let csv = "NVIDIA GeForce RTX 3060 Laptop GPU, 6144, [N/A]\n";
-        let gpus = parse_nvidia_smi(csv);
-        assert_eq!(gpus.len(), 1);
-        assert_eq!(gpus[0].power_limit_w, None);
     }
 }
