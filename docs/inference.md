@@ -263,9 +263,8 @@ Conclusiones:
 - Incluso con GPU0 en x1, el reparto por capas da 23.5 tok/s a 64K. El enlace
   estrecho solo frena la carga del modelo (4x más lenta), y `forge doctor`
   avisa de ello.
-- Sacar la caché KV a la RAM (`-nkvo`), que es el fallback que el SDD propone
-  para enlaces x4, hunde la generación a 0.6 tok/s. Ver la pregunta abierta en
-  `docs/HANDOFF.md`.
+- Sacar la caché KV a la RAM (`-nkvo`) hunde la generación a 0.6 tok/s. Por
+  eso, con enlaces x4 o menores se mantiene el reparto por capas (ADR-0011).
 - La segunda GPU sirve sobre todo para el prefill (+35–40%). Con una sola
   GPU de 12 GB, el 7B a 64K sigue dando unos 22 tok/s (relevante para RNF-15).
 

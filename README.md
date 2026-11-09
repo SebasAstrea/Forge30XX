@@ -308,7 +308,7 @@ FORGE_LOG_LEVEL=info
 - KV: K `f16` + V `turbo3` (~2.1 GB a 64K, ADR-0006) repartida GPU0/GPU1 midiendo PCIe.
 - Total: <= 11.4 GB por GPU.
 - Velocidad objetivo: >= 22 tok/s con contexto lleno.
-- Fallback: si GPU1 en PCIe x4, KV a RAM, contexto 48K, >= 18 tok/s.
+- Enlace PCIe x4 o menor: se mantiene el reparto por capas y `forge doctor` avisa (ADR-0011).
 
 ---
 
@@ -496,6 +496,7 @@ Uso personal y comercial permitido. Sin garantías. El autor no se responsabiliz
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) y el fork [TurboQuant](https://github.com/TheTom/llama-cpp-turboquant).
 - [Qwen](https://github.com/QwenLM/Qwen2.5-Coder) por los modelos base.
 - [Unsloth](https://github.com/unslothai/unsloth) por acelerar QLoRA.
+- [Glaive function-calling v2](https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2) (Apache-2.0), parte pública del dataset de tool-calling (ADR-0012).
 - [port-rag-potty](https://github.com/SebasAstrea/port-rag-potty) a mí mismo por el RAG portable XD.
 - La comunidad de RTX 30xx que sigue exprimiendo hardware "obsoleto".
 

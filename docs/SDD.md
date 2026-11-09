@@ -69,7 +69,7 @@ AMD/Intel/40xx/50xx. Entrenamiento desde cero. Multimodalidad. Nube/multi-tenant
 ### Perfil B: 2x RTX 3060 12 GB
 - 24 GB total, sin NVLink, PCIe gen3/4, comunicación vía host.
 - Estrategia: 7B Q4 (~4.4 GB) en GPU0. KV con K f16 + V turbo3 (ADR-0006) repartida GPU0/GPU1 midiendo ancho PCIe real. Contexto completo en GPU (ADR-0005).
-- Fallback: si GPU1 en PCIe x4, mover KV a RAM; GPU1 solo offload capas. Contexto 48K, ≥18 tok/s.
+- Enlace PCIe x4 o menor en alguna GPU: se mantiene el reparto por capas y `forge doctor` avisa (ADR-0011). Sacar la KV a RAM se descarta: 0.6 tok/s medidos a 64K.
 
 ### Matriz compatibilidad
 
@@ -104,7 +104,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 ### 3.3 Inferencia y contexto
 - RF-05 | Integrar llama-cpp-turboquant; turbo2 (A) / turbo3 (B) | Must | * | A: 32K → <1.5 GB KV. B: 64K → <3 GB KV.
 - RF-06 | Contexto máximo (32K A, 64K B) con toda la caché KV en VRAM, vía TurboQuant + flash attention, sin ventana (ADR-0005) | Must | * | KV a contexto máximo dentro del KPI (A <1.5 GB, B <3 GB). La velocidad con contexto lleno la cubre RNF-01.
-- RF-06b | Repartir KV entre 2 GPUs midiendo PCIe real | Must | B | Proporción maximiza tok/s; si PCIe x4, KV a RAM y registra.
+- RF-06b | Repartir KV entre 2 GPUs midiendo PCIe real | Must | B | Proporción maximiza tok/s; si PCIe ≤x4, mantiene el reparto por capas y avisa (ADR-0011).
 - RF-07 | API OpenAI (`/v1/chat/completions`, `/v1/models`) sobre llama-server | Must | * | Cliente `openai` Python sin cambios.
 - RF-08 | Gramática GBNF para tool-calls JSON/XML | Must | * | ≥90% (A) / ≥95% (B) parseables.
 - RF-08b | Bajo VRAM ≥90%: turbo3→turbo2 o contexto 24K/48K | Must | * | Sigue respondiendo; registra degradación.
@@ -164,7 +164,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 ## 5. Historias de Usuario
 
 - HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, 3B Q4, 32K, KV turbo2, aviso TGP<100W. B: 7B Q4, 64K, KV f16/turbo3, reparto medido | 5 pts
-- HU-00b | 2x3060: reparto automático entre GPUs | 7B en GPU0; KV mide PCIe; si x4, KV a RAM y registra | 8 pts
+- HU-00b | 2x3060: reparto automático entre GPUs | 7B y su KV repartidos por capas entre GPUs; mide PCIe; si ≤x4, avisa (ADR-0011) | 8 pts
 - HU-01 | 3060 6 GB: entrenar LoRA 3B sin OOM | `make train-lora PROFILE=A` sin OOM batch 8; manifest completo; ≥90% tool-calls válidas | 13 pts
 - HU-02 | 2x3060: entrenar 7B usando ambas | device_map=auto <6 h; ≥95% válidas | 8 pts
 - HU-03 | 3060 6 GB: 32K contexto sin agotar VRAM | ≤5.7 GB; ≥12 tok/s lleno | 8 pts
@@ -235,7 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
-- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 
@@ -262,7 +262,7 @@ Rust 1.80+, Axum 0.7+, Tokio 1.40+, PyO3 0.22+, serde/serde_json, rusqlite 0.31+
 llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+ con -DGGML_CUDA=ON, llama-server vía HTTP/API OpenAI.
 
 ### ML (Python)
-Python 3.11+, PyTorch 2.4+, Unsloth 2024.10+, PEFT 0.13+, bitsandbytes 0.44+, FlagEmbedding (bge-m3) vía Ollama, ModernBERT fine-tuned o Qwen3Guard-Gen-0.6B para guard, ChromaDB, pytest+pytest-cov+hypothesis, ruff+mypy.
+Python 3.11+, datos de tool-calling Glaive v2 (Apache-2.0) + sintéticos (ADR-0012), PyTorch 2.4+, Unsloth 2024.10+, PEFT 0.13+, bitsandbytes 0.44+, FlagEmbedding (bge-m3) vía Ollama, ModernBERT fine-tuned o Qwen3Guard-Gen-0.6B para guard, ChromaDB, pytest+pytest-cov+hypothesis, ruff+mypy.
 
 ### Frontend
 SvelteKit 2.0+ con @sveltejs/vite-plugin-svelte 4+ (ADR-0007), TypeScript 5.5+, TailwindCSS 3.4+, EventSource (SSE), CodeMirror 6, uPlot 1.6+, Vitest+Playwright.
