@@ -9,6 +9,9 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Changed (decisiones del PO 2026-11-09)
 
+- Modelos base (ADR-0013): perfil A Qwen3.5-4B y perfil B Qwen3.6-35B-A3B
+  (MoE, Apache-2.0). `forge doctor` recomienda para B `--n-cpu-moe 2
+  --reasoning off`; medido 34.8 tok/s a 64K y RF-08 al 100% sin LoRA.
 - Con PCIe x4 o menor se mantiene el reparto por capas y `forge doctor` avisa;
   la KV ya no se saca a RAM (ADR-0011).
 - RF-06 redefinido (ADR-0005): contexto completo en VRAM con TurboQuant, sin

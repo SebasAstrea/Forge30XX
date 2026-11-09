@@ -60,6 +60,9 @@
 | 4 | Retirar `tonic` | 0008 | `Cargo.toml`, SDD §8 |
 | 5 | LLM-juez con opencode y modelo gratuito | 0009 | `python -m forge_ml.judge`, SDD §10 |
 | 6 | Juez: puntuación absoluta, 25 tareas por perfil | 0010 | `forge_ml.judge`, AGENTS.md 11.5 |
+| 7 | PCIe ≤x4: reparto por capas, sin KV en RAM | 0011 | SDD, `forge doctor` |
+| 8 | Dataset QLoRA: Glaive v2 + sintético | 0012 | `forge_ml.dataset` |
+| 9 | Modelos: Qwen3.5-4B (A), Qwen3.6-35B-A3B (B) | 0013 | SDD, `forge doctor` |
 
 ### LLM-juez (ADR-0009, ADR-0010)
 
@@ -98,8 +101,13 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
   - [ ] RF-04, export Q4_K_M: recuantizar el Q4_K_M fusionado pierde un 3.2%
         (>2%). Hay que fusionar sobre los pesos de 16 bits de
         `Qwen/Qwen2.5-Coder-7B-Instruct` (~15 GB, la descarga la hace el PO).
-- [ ] **Licencia por revisar (PO)**: Qwen2.5-Coder-3B-Instruct, el modelo del
-      perfil A, usa la licencia `qwen-research`, no Apache-2.0 como el 7B.
+- [x] **Cambio de modelos (ADR-0013)**: perfil B = Qwen3.6-35B-A3B UD-Q4_K_M
+      (34.8 tok/s a 64K, RF-08 100% sin LoRA); perfil A = Qwen3.5-4B
+      (Apache-2.0). Resuelve la licencia `qwen-research` del 3B.
+  - [ ] Medir Qwen3.5-4B en A (KV, VRAM, tok/s, RF-08): falta el GGUF.
+  - [ ] **Decisión PO**: RF-03 tras el cambio. ¿QLoRA de Qwen3.5-4B en A?
+        ¿El 35B-A3B necesita LoRA si ya da 100% en RF-08? RF-04 con el 7B
+        queda sin objeto si B ya no usa el 7B.
 - [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter
       (dependencia nueva → ADR + PO).
 - [ ] **S7 — RAG en orquestador**: cablear `rag::RagClient`/`RouterPolicy` a
