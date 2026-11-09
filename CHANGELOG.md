@@ -7,6 +7,19 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Changed (decisiones del PO 2026-11-09)
+
+- RF-06 redefinido (ADR-0005): contexto completo en VRAM con TurboQuant, sin
+  ventana KVFlash. `forge doctor` y `forge.config.toml` dejan de mostrar la
+  ventana y pasan a indicar los tipos K y V por separado.
+- Perfil B recomienda `-ctk f16 -ctv turbo3` (ADR-0006): 23.8 tok/s a 64K con
+  ~2.1 GB de KV; KL-divergence 0.0040 frente a f16/f16.
+- `@sveltejs/vite-plugin-svelte` 3 → 4 (ADR-0007): soporte oficial de Svelte 5.
+
+### Removed
+
+- `tonic` del orquestador (ADR-0008): sin uso desde ADR-0004.
+
 ### Fixed
 
 - CI: `ci.yml` no era YAML válido (`: ` sin comillas en el job de bootstrap) y

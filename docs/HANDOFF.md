@@ -50,30 +50,25 @@
 - [x] **RF-08 repetido** con Q4_K_M: 3B 97% (A, umbral 90%), 7B en 2 GPUs
       100% (B, umbral 95%).
 
-## Decisiones pendientes del PO (bloquean)
+## Decisiones del PO (2026-11-09)
 
-1. **KVFlash (RF-06)**. El fork no tiene nada llamado KVFlash. Lo más parecido
-   es *block KV cache streaming* (`--kv-stream-arena-mib`, `docs/kv-stream.md`
-   del fork): páginas KV residentes en GPU y el resto en RAM. Limitaciones:
-   solo acelera modelos con head dim 256 (Qwen2.5-Coder usa 128, así que
-   funciona pero sin beneficio), exige `-np 1`, desactiva context shift y
-   necesita compilar con `GGML_CUDA_FA_ALL_QUANTS=ON`. Opciones: (a) adoptar
-   kv-stream y revisar el criterio de RF-06; (b) redefinir RF-06 como la
-   cuantización turbo + flash attention ya medida; (c) implementación propia.
-2. **Combinación KV del perfil B**. A 64K, `q8_0/turbo3` (lo que el fork elige
-   al pedir turbo3) da 17.7 tok/s (<22 del KPI). `f16/turbo3` da 23.8 tok/s y
-   ~2.1 GB de KV (<3 GB). Decidir si B usa `-ctk f16 -ctv turbo3` o si se
-   revisa el KPI. Falta además medir la calidad (AGENTS.md 11.5).
-3. **`@sveltejs/vite-plugin-svelte` 3 → 4+** (soporte oficial de Svelte 5).
-   Cambio de versión de stack.
-4. **Retirar `tonic`** del `Cargo.toml`: sin uso tras ADR-0004.
+| # | Decisión | ADR | Aplicado |
+|---|---|---|---|
+| 1 | RF-06 sin ventana KV: contexto completo en VRAM con TurboQuant | 0005 | SDD, doctor, config, docs |
+| 2 | Perfil B con `-ctk f16 -ctv turbo3` | 0006 | `forge doctor`, docs. KLD 0.0040 vs f16 |
+| 3 | `@sveltejs/vite-plugin-svelte` 3 → 4 | 0007 | `frontend/package.json` |
+| 4 | Retirar `tonic` | 0008 | `Cargo.toml`, SDD §8 |
+
+Sin decisiones pendientes. Queda abierto: LLM-juez de AGENTS.md 11.5 para la
+caché KV (el juez Qwen2.5-72B no cabe en 2x12 GB; ¿otro juez o equipo?).
 
 ## Backlog inmediato (orden del SDD §6)
 
-- [ ] **S2 — KV Perfil A**: RF-06 (decisión 1), HU-03 en una 3060 Laptop 6 GB
-      real (la velocidad medida aquí es de escritorio).
+- [ ] **S2 — KV Perfil A**: HU-03 en una 3060 Laptop 6 GB real (la velocidad
+      medida aquí es de escritorio). RF-05/RF-06 ya cumplen el criterio de VRAM.
 - [ ] **S3 — KV Perfil B + dual GPU**: RF-06b (reparto KV midiendo PCIe),
-      HU-00b, HU-03b (decisión 2).
+      HU-00b, HU-03b. Volver a medir f16/turbo3 tras el reparto (margen
+      23.8 vs 22 tok/s).
 - [ ] **S4/S5 — QLoRA A/B**: RF-03, RF-03b, RF-04. Stub en
       `python/forge_ml/train.py`.
 - [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter
@@ -88,6 +83,9 @@
   runners self-hosted. `warmachine` podría registrarse como runner
   `[self-hosted, gpu, rtx3060-dual]`.
 - `frontend/` sigue siendo un esqueleto (S9).
+- CI de GitHub en verde desde el commit `fix(build): restaurar yaml…`
+  (2026-11-09). Generar `package-lock.json` con `npx npm@10` (la versión del
+  CI): npm 11 elimina entradas que npm 10 exige.
 
 ## Cómo probar lo hecho
 
