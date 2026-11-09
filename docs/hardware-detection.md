@@ -24,10 +24,10 @@ configuración óptima (perfil, modelo, contexto y tipos de caché K/V) según l
 
 | GPU detectada            | VRAM  | Perfil  | Modelo                  | Contexto | KV (K / V)      |
 | ------------------------ | ----- | ------- | ----------------------- | -------- | --------------- |
-| 3060 Laptop              | 6 GB  | A       | Qwen2.5-Coder-3B Q4_K_M | 32 768   | turbo2 / turbo2 |
+| 3060 Laptop              | 6 GB  | A       | Qwen3.5-4B Q4_K_M       | 32 768   | turbo2 / turbo2 |
 | 3070 / 3070 Ti           | 8 GB  | A+      | 3B Q5_K_M               | 40 960   | turbo2 / turbo2 |
 | 3060 12 GB / 3080 10 GB  | 10-12 | A+      | 7B Q4_K_M               | 49 152   | turbo3 / turbo3 |
-| 2x 3060 12 GB            | 24    | B       | 7B Q4_K_M               | 65 536   | f16 / turbo3    |
+| 2x 3060 12 GB            | 24    | B       | Qwen3.6-35B-A3B Q4_K_M  | 65 536   | f16 / turbo3    |
 | 3080 Ti / 3090           | ≥24   | Premium | 7B Q5_K_M               | 100 000  | turbo3 / turbo3 |
 
 El perfil B usa K en f16 (ADR-0006). No hay ventana KV: el contexto completo
@@ -50,7 +50,7 @@ Salida de ejemplo (perfil A, 3060 Laptop con TGP bajo):
 ```
 forge doctor — configuración recomendada
   Perfil         : A
-  Modelo         : Qwen2.5-Coder-3B Q4_K_M
+  Modelo         : Qwen3.5-4B Q4_K_M
   Contexto       : 32768 tokens
   Caché KV (K/V) : turbo2 / turbo2
   llama-server   : -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2
@@ -65,7 +65,7 @@ Salida real en `warmachine` (2x RTX 3060 12 GB, GPU0 en una ranura x1):
 ```
   Perfil         : B
   Caché KV (K/V) : f16 / turbo3
-  llama-server   : -c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3
+  llama-server   : -c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3 --n-cpu-moe 2 --reasoning off
   Avisos         :
     - GPU 0 en PCIe Gen3 x1 (~1.0 GB/s): la carga del modelo y el reparto entre GPUs serán más lentos; ...
 ```

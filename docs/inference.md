@@ -278,3 +278,35 @@ cargo test tool_call                      # parser estricto de tool-calls
 Probado end-to-end contra `llama-server` con Qwen2.5-Coder-3B Q8_0 en una
 RTX 3050 6 GB: `forge chat` muestra el primer token a ~0.85 s y el resto
 según se generan.
+
+## Perfil B con Qwen3.6-35B-A3B (ADR-0013)
+
+Modelo: `unsloth/Qwen3.6-35B-A3B-GGUF`, archivo `Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`
+(21.1 GiB, arquitectura `qwen35moe`, Apache-2.0). Es un MoE con 35B parámetros
+en total y 3B activos por token. Solo 10 de sus 40 capas usan atención con
+caché KV (el resto son Gated DeltaNet).
+
+```bash
+llama-server -m models/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf \
+  -c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3 --n-cpu-moe 2 --reasoning off --port 8080
+```
+
+- Con todas las capas en GPU, `llama-server` calcula que faltan ~1.2 GB y el
+  arranque falla. `--n-cpu-moe 2` deja en RAM los expertos de 2 capas.
+- `--reasoning off` es obligatorio para RF-08: con el modo thinking, la
+  gramática de tool-calls da 0%.
+
+Medición 2026-11-09 (`warmachine`):
+
+| Prueba | Resultado |
+|---|---|
+| `tests/hu03_full_context.rs`, 64 769 tokens | 34.8 tok/s; 11 078 / 10 722 MiB ✅ |
+| RF-08 sin / con gramática | 100% / 100% ✅ |
+
+`llama-bench -fa 1 -ctk f16 -ctv turbo3 -p 0 -n 64` según `--n-cpu-moe`:
+
+| `--n-cpu-moe` | tok/s @4K | tok/s @64K |
+|---|---:|---:|
+| 2 | 67.1 | 35.1 |
+| 4 | 65.2 | 34.0 |
+| 8 | 41.7 | 31.8 |

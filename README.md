@@ -32,7 +32,7 @@ Lema: máximo provecho con lo poco disponible.
 
 ## Qué es
 
-Forge30XX convierte un modelo abierto (Qwen2.5-Coder-3B o 7B) en un agente de codificación autónomo que puede:
+Forge30XX convierte un modelo abierto (Qwen3.5-4B o Qwen3.6-35B-A3B MoE, ADR-0013) en un agente de codificación autónomo que puede:
 
 - Leer, editar, crear y borrar archivos de tu proyecto.
 - Buscar documentación actual en la web (con lista blanca de dominios).
@@ -65,9 +65,9 @@ Forge30XX ataca los tres frentes:
 
 | GPU | VRAM | Perfil | Modelo recomendado | Contexto |
 |---|---|---|---|---|
-| RTX 3060 Laptop | 6 GB | A | Qwen2.5-Coder-3B Q4 | 32K |
+| RTX 3060 Laptop | 6 GB | A | Qwen3.5-4B Q4 | 32K |
 | RTX 3060 12 GB (single) | 12 GB | A+ | Qwen2.5-Coder-7B Q4 | 48K |
-| 2x RTX 3060 12 GB | 24 GB | B | Qwen2.5-Coder-7B Q4 | 64K |
+| 2x RTX 3060 12 GB | 24 GB | B | Qwen3.6-35B-A3B Q4 (MoE) | 64K |
 | RTX 3070 / 3070 Ti | 8 GB | A+ | 3B Q5 / 7B Q3 | 40K |
 | RTX 3080 10 GB | 10 GB | A+ | 7B Q4 | 48K |
 | RTX 3080 Ti / 3090 | 12-24 GB | Premium | 7B Q5 / 14B Q4 | 100K+ |
@@ -162,11 +162,11 @@ cd frontend && npm install && npm run build && cd ..
 ### Modelos
 
 ```bash
-# Perfil A: 3B Q4_K_M
-forge model download qwen2.5-coder-3b-instruct-q4_k_m
+# Perfil A: Qwen3.5-4B Q4_K_M (~2.6 GB)
+wget -P models/ https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf
 
-# Perfil B: 7B Q4_K_M
-forge model download qwen2.5-coder-7b-instruct-q4_k_m
+# Perfil B: Qwen3.6-35B-A3B UD-Q4_K_M (~21 GB)
+wget -P models/ https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
 ```
 
 ---
@@ -282,15 +282,15 @@ FORGE_LOG_LEVEL=info
 
 ### Perfil A: RTX 3060 6 GB Laptop
 
-- Modelo: Qwen2.5-Coder-3B Q4_K_M (~1.9 GB).
-- KV: TurboQuant `turbo2` (0.15–0.41 GB medidos a 32K).
+- Modelo: Qwen3.5-4B Q4_K_M (~2.6 GB).
+- KV: TurboQuant `turbo2` (pendiente de medir con Qwen3.5-4B).
 - Overhead: ~0.8 GB.
 - Total: ~5.7 GB (95% de VRAM).
 - Velocidad objetivo: >= 12 tok/s con contexto lleno.
 
 ### Perfil B: 2x RTX 3060 12 GB
 
-- Modelo: Qwen2.5-Coder-7B Q4_K_M (~4.4 GB) en GPU0.
+- Modelo: Qwen3.6-35B-A3B Q4_K_M (~21 GB, MoE con 3B activos) repartido entre las dos GPUs, con los expertos de 2 capas en RAM y sin modo thinking (ADR-0013). Medido: 34.8 tok/s a 64K.
 - KV: K `f16` + V `turbo3` (~2.1 GB a 64K, ADR-0006) repartida GPU0/GPU1 midiendo PCIe.
 - Total: <= 11.4 GB por GPU.
 - Velocidad objetivo: >= 22 tok/s con contexto lleno.
@@ -480,7 +480,7 @@ Uso personal y comercial permitido. Sin garantías. El autor no se responsabiliz
 ## Agradecimientos
 
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) y el fork [TurboQuant](https://github.com/TheTom/llama-cpp-turboquant).
-- [Qwen](https://github.com/QwenLM/Qwen2.5-Coder) por los modelos base.
+- [Qwen](https://github.com/QwenLM) por los modelos base (Qwen3.5 y Qwen3.6, Apache-2.0).
 - [Unsloth](https://github.com/unslothai/unsloth) por acelerar QLoRA.
 - [Glaive function-calling v2](https://huggingface.co/datasets/glaiveai/glaive-function-calling-v2) (Apache-2.0), parte pública del dataset de tool-calling (ADR-0012).
 - [port-rag-potty](https://github.com/SebasAstrea/port-rag-potty) a mí mismo por el RAG portable XD.

@@ -85,6 +85,8 @@ pub struct Recommendation {
     pub kv_type_k: String,
     /// Tipo de la caché V (`-ctv` del llama-server).
     pub kv_type_v: String,
+    /// Flags adicionales del llama-server propios del modelo (p. ej. MoE).
+    pub extra_args: Vec<String>,
     /// Avisos para el usuario (p. ej. TGP bajo, GPU no soportada).
     pub warnings: Vec<String>,
 }
@@ -97,7 +99,7 @@ impl Recommendation {
     /// medido (docs/inference.md, RF-06b).
     pub fn llama_server_args(&self) -> Vec<String> {
         let ctx = self.context_tokens.to_string();
-        [
+        let base = [
             "-c",
             &ctx,
             "-ngl",
@@ -110,9 +112,11 @@ impl Recommendation {
             &self.kv_type_k,
             "-ctv",
             &self.kv_type_v,
-        ]
-        .map(str::to_string)
-        .to_vec()
+        ];
+        base.map(str::to_string)
+            .into_iter()
+            .chain(self.extra_args.iter().cloned())
+            .collect()
     }
 }
 
@@ -148,6 +152,7 @@ pub fn recommend(gpus: &[Gpu]) -> Result<Recommendation, HardwareError> {
         context_tokens: tier.context_tokens,
         kv_type_k: tier.kv_type_k.to_string(),
         kv_type_v: tier.kv_type_v.to_string(),
+        extra_args: tier.extra_args.iter().map(|a| a.to_string()).collect(),
         warnings,
     })
 }
@@ -159,15 +164,20 @@ struct Tier {
     context_tokens: u32,
     kv_type_k: &'static str,
     kv_type_v: &'static str,
+    extra_args: &'static [&'static str],
 }
 
 const TIER_B: Tier = Tier {
     profile: Profile::B,
-    model: "Qwen2.5-Coder-7B Q4_K_M",
+    // ADR-0013: MoE 35B/3B activos. Con todas las capas en GPU no cabe; 2 capas
+    // de expertos en RAM dejan 11.1/10.7 GB por GPU a 64K y 34.8 tok/s.
+    model: "Qwen3.6-35B-A3B Q4_K_M",
     context_tokens: 65_536,
     // ADR-0006: K en f16 para mantener ≥22 tok/s a 64K.
     kv_type_k: "f16",
     kv_type_v: "turbo3",
+    // Sin modo thinking: con él la gramática de tool-calls da 0% (RF-08).
+    extra_args: &["--n-cpu-moe", "2", "--reasoning", "off"],
 };
 const TIER_PREMIUM: Tier = Tier {
     profile: Profile::Premium,
@@ -175,6 +185,7 @@ const TIER_PREMIUM: Tier = Tier {
     context_tokens: 100_000,
     kv_type_k: "turbo3",
     kv_type_v: "turbo3",
+    extra_args: &[],
 };
 const TIER_A_PLUS_10: Tier = Tier {
     profile: Profile::APlus,
@@ -182,6 +193,7 @@ const TIER_A_PLUS_10: Tier = Tier {
     context_tokens: 49_152,
     kv_type_k: "turbo3",
     kv_type_v: "turbo3",
+    extra_args: &[],
 };
 const TIER_A_PLUS_8: Tier = Tier {
     profile: Profile::APlus,
@@ -189,13 +201,16 @@ const TIER_A_PLUS_8: Tier = Tier {
     context_tokens: 40_960,
     kv_type_k: "turbo2",
     kv_type_v: "turbo2",
+    extra_args: &[],
 };
 const TIER_A: Tier = Tier {
     profile: Profile::A,
-    model: "Qwen2.5-Coder-3B Q4_K_M",
+    // ADR-0013: Apache-2.0, sustituye a Qwen2.5-Coder-3B (licencia qwen-research).
+    model: "Qwen3.5-4B Q4_K_M",
     context_tokens: 32_768,
     kv_type_k: "turbo2",
     kv_type_v: "turbo2",
+    extra_args: &[],
 };
 
 fn select_tier(vram_gib: u32, dual: bool) -> &'static Tier {
@@ -261,9 +276,11 @@ mod tests {
             gpu("NVIDIA GeForce RTX 3060", 12288, Some(170)),
         ])
         .expect("rec");
+        // ADR-0013: Qwen3.6-35B-A3B con 2 capas de expertos en RAM y sin thinking.
+        assert_eq!(rec.model, "Qwen3.6-35B-A3B Q4_K_M");
         assert_eq!(
             rec.llama_server_args().join(" "),
-            "-c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3"
+            "-c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3 --n-cpu-moe 2 --reasoning off"
         );
     }
 
@@ -309,6 +326,8 @@ mod tests {
         let rec = recommend(&[gpu("NVIDIA GeForce RTX 3060 Laptop GPU", 6144, Some(80))])
             .expect("recommend");
         assert_eq!(rec.profile, Profile::A);
+        // ADR-0013: Qwen3.5-4B (Apache-2.0) sustituye a Qwen2.5-Coder-3B.
+        assert_eq!(rec.model, "Qwen3.5-4B Q4_K_M");
         assert_eq!(rec.context_tokens, 32_768);
         assert_eq!(
             (rec.kv_type_k.as_str(), rec.kv_type_v.as_str()),

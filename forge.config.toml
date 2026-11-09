@@ -7,7 +7,7 @@ gpu_index = 0              # GPU principal
 kv_split_ratio = 0.6       # Perfil B: fracción de KV en GPU0
 
 [model]
-path = "models/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
+path = "models/Qwen3.5-4B-Q4_K_M.gguf"   # A; B: Qwen3.6-35B-A3B-UD-Q4_K_M.gguf (ADR-0013)
 context_size = 32768
 kv_type_k = "turbo2"       # -ctk del llama-server. A: turbo2; B: f16 (ADR-0006)
 kv_type_v = "turbo2"       # -ctv del llama-server. A: turbo2; B: turbo3

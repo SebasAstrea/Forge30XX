@@ -34,7 +34,7 @@ Regla: ante ambigüedad entre este documento y una instrucción del PO, prevalec
 
 ## 1. Propósito
 
-Convertir un modelo abierto (Qwen2.5-Coder-3B en A, 7B en B) en agente de codificación autónomo: leer, editar, crear, borrar archivos; buscar docs web; navegar repos. Todo local, sin nube.
+Convertir un modelo abierto (Qwen3.5-4B en A, Qwen3.6-35B-A3B MoE en B; ADR-0013) en agente de codificación autónomo: leer, editar, crear, borrar archivos; buscar docs web; navegar repos. Todo local, sin nube.
 
 Problema: agentes en nube son caros y filtran código. Intentos locales fallan por (a) modelos 7B+ no caben en 6 GB, (b) contexto largo agota VRAM, (c) mala gestión multi-turno. Solución: QLoRA para especialización, TurboQuant (caché KV cuantizada) para contexto, port-rag-potty para reducir contexto efectivo, degradación con gracia bajo OOM.
 
@@ -42,7 +42,7 @@ Problema: agentes en nube son caros y filtran código. Intentos locales fallan p
 
 | KPI | Perfil A (6 GB) | Perfil B (2x12 GB) |
 |---|---|---|
-| Modelo | 3B Q4_K_M | 7B Q4_K_M split |
+| Modelo | Qwen3.5-4B Q4_K_M | Qwen3.6-35B-A3B Q4_K_M (MoE) split |
 | Contexto efectivo | 32K | 64K |
 | Velocidad | ≥12 tok/s | ≥22 tok/s |
 | KV VRAM | <1.5 GB | <3 GB total |
@@ -64,20 +64,20 @@ AMD/Intel/40xx/50xx. Entrenamiento desde cero. Multimodalidad. Nube/multi-tenant
 
 ### Perfil A: RTX 3060 6 GB Laptop
 - 6 GB GDDR6, TGP 85-115 W, ~192 GB/s, RAM sistema ≥16 GB.
-- Estrategia: 3B Q4 (~1.9 GB) + KV turbo2 (0.15–0.41 GB medidos a 32K, `docs/inference.md`) + overhead (~0.8 GB). Contexto completo en GPU (ADR-0005). Offload capas a RAM vía mmap.
+- Estrategia: Qwen3.5-4B Q4 (~2.6 GB) + KV turbo2 (pendiente de medir con este modelo; con Qwen2.5-3B fue 0.15–0.41 GB a 32K) + overhead (~0.8 GB). Contexto completo en GPU (ADR-0005). Offload capas a RAM vía mmap.
 
 ### Perfil B: 2x RTX 3060 12 GB
 - 24 GB total, sin NVLink, PCIe gen3/4, comunicación vía host.
-- Estrategia: 7B Q4 (~4.4 GB) en GPU0. KV con K f16 + V turbo3 (ADR-0006) repartida GPU0/GPU1 midiendo ancho PCIe real. Contexto completo en GPU (ADR-0005).
+- Estrategia: Qwen3.6-35B-A3B Q4_K_M (~21 GB) repartido por capas entre GPU0/GPU1, con los expertos de 2 capas en RAM (`--n-cpu-moe 2`) y sin modo thinking (ADR-0013). KV con K f16 + V turbo3 (ADR-0006). Medido: 34.8 tok/s a 64K, 11.1/10.7 GB por GPU. Contexto completo en GPU (ADR-0005).
 - Enlace PCIe x4 o menor en alguna GPU: se mantiene el reparto por capas y `forge doctor` avisa (ADR-0011). Sacar la KV a RAM se descarta: 0.6 tok/s medidos a 64K.
 
 ### Matriz compatibilidad
 
 | GPU | VRAM | Perfil | Modelo | Contexto |
 |---|---|---|---|---|
-| 3060 Laptop | 6 | A | 3B Q4 | 32K |
+| 3060 Laptop | 6 | A | Qwen3.5-4B Q4 | 32K |
 | 3060 12 GB single | 12 | A+ | 7B Q4 | 48K |
-| 2x 3060 12 GB | 24 | B | 7B Q4 | 64K |
+| 2x 3060 12 GB | 24 | B | Qwen3.6-35B-A3B Q4 (MoE) | 64K |
 | 3070/3070 Ti | 8 | A+ | 3B Q5 / 7B Q3 | 40K |
 | 3080 10 GB | 10 | A+ | 7B Q4 | 48K |
 | 3080 Ti/3090 | 12-24 | Premium | 7B Q5 / 14B Q4 | 100K+ |
@@ -95,7 +95,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 - RF-00b | Degradar sin OOM: reducir contexto, mover capas CPU, o modelo menor | Must | * | Prompt que excede VRAM responde con menor calidad; registra degradación.
 
 ### 3.2 Modelo y especialización
-- RF-01 | Cargar 3B (A) o 7B (B) GGUF Q4_K_M/Q5_K_M | Must | * | A: <30 s; B: <60 s.
+- RF-01 | Cargar Qwen3.5-4B (A) o Qwen3.6-35B-A3B (B) GGUF Q4_K_M/Q5_K_M (ADR-0013) | Must | * | A: <30 s; B: <60 s.
 - RF-02 | Aplicar LoRA sin recargar base | Must | * | Hot-swap <3 s; 10 prompts verificables.
 - RF-03 | Pipeline QLoRA reproducible para tool-calling | Must | * | `make train-lora PROFILE=A` <4 h en 6 GB; B <6 h en 2x3060.
 - RF-03b | Unsloth + QLoRA 4-bit + gradient_checkpointing + paged_adamw_8bit | Must | A | 3B batch efectivo 8 sin OOM en 6 GB.
@@ -163,8 +163,8 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 
 ## 5. Historias de Usuario
 
-- HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, 3B Q4, 32K, KV turbo2, aviso TGP<100W. B: 7B Q4, 64K, KV f16/turbo3, reparto medido | 5 pts
-- HU-00b | 2x3060: reparto automático entre GPUs | 7B y su KV repartidos por capas entre GPUs; mide PCIe; si ≤x4, avisa (ADR-0011) | 8 pts
+- HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, Qwen3.5-4B Q4, 32K, KV turbo2, aviso TGP<100W. B: Qwen3.6-35B-A3B Q4, 64K, KV f16/turbo3, reparto medido | 5 pts
+- HU-00b | 2x3060: reparto automático entre GPUs | Modelo y su KV repartidos por capas entre GPUs; mide PCIe; si ≤x4, avisa (ADR-0011) | 8 pts
 - HU-01 | 3060 6 GB: entrenar LoRA 3B sin OOM | `make train-lora PROFILE=A` sin OOM batch 8; manifest completo; ≥90% tool-calls válidas | 13 pts
 - HU-02 | 2x3060: entrenar 7B usando ambas | device_map=auto <6 h; ≥95% válidas | 8 pts
 - HU-03 | 3060 6 GB: 32K contexto sin agotar VRAM | ≤5.7 GB; ≥12 tok/s lleno | 8 pts
@@ -235,7 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
-- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético), 0013 (modelos: Qwen3.5-4B en A, Qwen3.6-35B-A3B en B).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 
