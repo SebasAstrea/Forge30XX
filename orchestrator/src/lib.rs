@@ -11,6 +11,9 @@ pub mod inference;
 pub mod rag;
 pub mod tool_call;
 
+#[cfg(test)]
+mod test_support;
+
 /// Error raíz de la librería del orquestador.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

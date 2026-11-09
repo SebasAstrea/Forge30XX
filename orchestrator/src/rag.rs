@@ -210,6 +210,7 @@ impl RagClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{closed_port_url, serve, Reply};
 
     #[test]
     fn small_target_reads_directly() {
@@ -260,5 +261,59 @@ mod tests {
         let r: QueryResponse = serde_json::from_str(json).expect("parse");
         assert_eq!(r.results.len(), 1);
         assert_eq!(r.results[0].path, "a.rs");
+    }
+
+    fn client(url: String) -> RagClient {
+        RagClient::new(url, Duration::from_secs(5)).expect("build")
+    }
+
+    #[tokio::test]
+    async fn health_reflects_service_status() {
+        let up = serve(vec![("GET /health", Reply::json("{\"ok\":true}"))]).await;
+        assert!(client(up).health().await.expect("health"));
+        let down = serve(vec![("GET /health", Reply::status(503))]).await;
+        assert!(!client(down).health().await.expect("health"));
+    }
+
+    #[tokio::test]
+    async fn health_fails_when_service_is_unreachable() {
+        let res = client(closed_port_url().await).health().await;
+        assert!(matches!(res, Err(RagError::Transport(_))));
+    }
+
+    #[tokio::test]
+    async fn route_parses_service_decision() {
+        let body = r#"{"action":"hybrid","conf":0.7,"save":900,"read":[{"path":"a.rs"}]}"#;
+        let url = serve(vec![("POST /route", Reply::json(body))]).await;
+        let r = client(url)
+            .route("dónde se parsea el SSE", 5, &["a.rs".to_string()])
+            .await
+            .expect("route");
+        assert_eq!(r.action, "hybrid");
+        assert_eq!(r.read[0].path, "a.rs");
+        assert_eq!(r.read[0].tok, 0);
+    }
+
+    #[tokio::test]
+    async fn query_returns_ranked_hits() {
+        let body = r#"{"results":[{"path":"a.rs","score":0.9,"text":"x"},{"path":"b.rs"}]}"#;
+        let url = serve(vec![("POST /query", Reply::json(body))]).await;
+        let hits = client(url).query("parser", 2).await.expect("query");
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[1].path, "b.rs");
+    }
+
+    #[tokio::test]
+    async fn non_success_status_is_transport_error_with_path() {
+        let url = serve(vec![("POST /query", Reply::status(500))]).await;
+        let res = client(url).query("parser", 2).await;
+        assert!(matches!(res, Err(RagError::Transport(m)) if m.contains("/query")));
+    }
+
+    #[tokio::test]
+    async fn malformed_body_is_transport_error() {
+        let url = serve(vec![("POST /route", Reply::json("no-json"))]).await;
+        let res = client(url).route("q", 1, &[]).await;
+        assert!(matches!(res, Err(RagError::Transport(_))));
     }
 }

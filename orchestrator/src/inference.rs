@@ -241,6 +241,7 @@ async fn send_ok(req: reqwest::RequestBuilder) -> Result<reqwest::Response, Infe
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{closed_port_url, serve, Reply};
 
     #[test]
     fn serializes_chat_request_roles_lowercase() {
@@ -285,27 +286,68 @@ mod tests {
         assert_eq!(p.max_tokens, 4096);
     }
 
-    /// Servidor HTTP falso que envía `body` en trozos de `chunk` bytes y cierra.
+    const COMPLETIONS: &str = "POST /v1/chat/completions";
+
     async fn fake_sse_server(body: &'static str, chunk: usize) -> String {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        serve(vec![(COMPLETIONS, Reply::sse(body, chunk))]).await
+    }
+
+    fn client(url: String) -> InferenceClient {
+        InferenceClient::new(url, Duration::from_secs(5)).expect("build")
+    }
+
+    #[tokio::test]
+    async fn health_reflects_models_endpoint_status() {
+        let up = serve(vec![("GET /v1/models", Reply::json("{\"data\":[]}"))]).await;
+        assert!(client(up).health().await.expect("health"));
+        let down = serve(vec![("GET /v1/models", Reply::status(503))]).await;
+        assert!(!client(down).health().await.expect("health"));
+    }
+
+    #[tokio::test]
+    async fn health_fails_when_server_is_unreachable() {
+        let res = client(closed_port_url().await).health().await;
+        assert!(matches!(res, Err(InferenceError::Transport(_))));
+    }
+
+    #[tokio::test]
+    async fn chat_returns_first_choice() {
+        let body = r#"{"choices":[{"message":{"role":"assistant","content":"hola"}}]}"#;
+        let url = serve(vec![(COMPLETIONS, Reply::json(body))]).await;
+        let reply = client(url)
+            .chat(&[Message::user("x")], &SamplingParams::default())
             .await
-            .expect("bind");
-        let addr = listener.local_addr().expect("addr");
-        tokio::spawn(async move {
-            let (mut sock, _) = listener.accept().await.expect("accept");
-            let mut req = [0u8; 4096];
-            let _ = sock.read(&mut req).await;
-            let head =
-                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n";
-            sock.write_all(head.as_bytes()).await.expect("head");
-            for part in body.as_bytes().chunks(chunk) {
-                sock.write_all(part).await.expect("part");
-                sock.flush().await.expect("flush");
-                tokio::time::sleep(Duration::from_millis(2)).await;
-            }
-        });
-        format!("http://{addr}")
+            .expect("chat");
+        assert_eq!(reply, "hola");
+    }
+
+    #[tokio::test]
+    async fn chat_without_choices_is_empty_response() {
+        let url = serve(vec![(COMPLETIONS, Reply::json(r#"{"choices":[]}"#))]).await;
+        let res = client(url)
+            .chat(&[Message::user("x")], &SamplingParams::default())
+            .await;
+        assert!(matches!(res, Err(InferenceError::EmptyResponse)));
+    }
+
+    #[tokio::test]
+    async fn chat_maps_http_error_to_transport() {
+        let url = serve(vec![(COMPLETIONS, Reply::status(500))]).await;
+        let res = client(url)
+            .chat(&[Message::user("x")], &SamplingParams::default())
+            .await;
+        assert!(matches!(res, Err(InferenceError::Transport(m)) if m.contains("500")));
+    }
+
+    #[tokio::test]
+    async fn chat_stream_without_done_returns_text_at_eof() {
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"fin\"}}]}\n\n";
+        let url = fake_sse_server(body, 64).await;
+        let full = client(url)
+            .chat_stream(&[Message::user("x")], &SamplingParams::default(), |_| {})
+            .await
+            .expect("stream");
+        assert_eq!(full, "fin");
     }
 
     #[tokio::test]

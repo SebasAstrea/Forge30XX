@@ -1,7 +1,7 @@
 //! Binario `forge`: CLI del orquestador Forge30XX.
 //!
-//! Subcomandos según README. En fase bootstrap los comandos están declarados
-//! pero su lógica se implementa en sprints posteriores (RF correspondientes).
+//! Subcomandos según README (RF-21). `doctor` y `chat` están implementados;
+//! `run` y `profile` se completan en sus sprints (S9/S10).
 #![deny(unsafe_code)]
 
 use std::io::{self, Write};
@@ -75,12 +75,7 @@ fn cmd_doctor(config_path: &str) -> Result<()> {
             print_recommendation(&rec);
             tracing::info!(profile = rec.profile.label(), "doctor ok");
         }
-        Err(e) => {
-            println!("forge doctor — no se detectó GPU NVIDIA.");
-            println!("  motivo: {e}");
-            println!("  (requiere driver NVIDIA y nvidia-smi en PATH)");
-            tracing::warn!(error = %e, "doctor: sin GPU");
-        }
+        Err(e) => print_no_gpu(&e),
     }
 
     let elapsed = started.elapsed();
@@ -89,6 +84,13 @@ fn cmd_doctor(config_path: &str) -> Result<()> {
         elapsed.as_millis()
     );
     Ok(())
+}
+
+fn print_no_gpu(e: &hardware::HardwareError) {
+    println!("forge doctor — no se detectó GPU NVIDIA.");
+    println!("  motivo: {e}");
+    println!("  (requiere driver NVIDIA y nvidia-smi en PATH)");
+    tracing::warn!(error = %e, "doctor: sin GPU");
 }
 
 fn print_recommendation(rec: &Recommendation) {
@@ -109,7 +111,7 @@ fn print_recommendation(rec: &Recommendation) {
 }
 
 fn cmd_run(_ui: bool) -> Result<()> {
-    tracing::warn!("run: pendiente Sprint S1 (RF-07 API OpenAI)");
+    tracing::warn!("run: pendiente Sprint S9 (RF-18 UI web)");
     Ok(())
 }
 
@@ -119,8 +121,13 @@ fn cmd_chat(config_path: &str) -> Result<()> {
     let (client, params) = build_inference(inf)?;
     let runtime = tokio::runtime::Runtime::new()?;
 
-    // Verifica que el llama-server responde antes de abrir el REPL.
-    if !runtime.block_on(client.health())? {
+    // Verifica que el llama-server responde antes de abrir el REPL. Un servidor
+    // caído o que no contesta 2xx se informa y no es un error del CLI.
+    let healthy = runtime.block_on(client.health()).unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "chat: llama-server inalcanzable");
+        false
+    });
+    if !healthy {
         println!("No se pudo contactar al llama-server en {}.", inf.base_url);
         println!("Arranca llama-server con un modelo GGUF y vuelve a intentarlo.");
         return Ok(());
