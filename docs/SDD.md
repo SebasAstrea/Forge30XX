@@ -235,7 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
-- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 
@@ -296,7 +296,7 @@ Scrum adaptado + Kanban soporte.
 - Property-based: hypothesis (Python), proptest (Rust) para router, tool executor, guardarraíles.
 - Rendimiento: criterion (Rust), pytest-benchmark (Python), llama-bench (inferencia).
 - Adversarial: set público 500 prompts (injection, jailbreak) + 200 benignos para falsos positivos.
-- Regresión de calidad de modelo: LLM-juez (Qwen2.5-72B vía API o local) evalúa 100 respuestas por release.
+- Regresión de calidad de modelo: LLM-juez externo vía CLI de opencode con un modelo gratuito (por defecto `opencode/deepseek-v4.1-flash-free`, ADR-0009) evalúa 100 respuestas por release. Herramienta: `python -m forge_ml.judge`.
 
 ### Umbrales por RF (bloquean merge)
 - RF-00/00b: 95% acierto perfil en CI hardware.

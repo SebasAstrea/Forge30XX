@@ -41,6 +41,6 @@ lo recomienda así. El resto de perfiles no cambia (A: turbo2/turbo2).
   PCIe) puede moverlo en cualquier sentido; hay que volver a medir en S3.
 - Calidad: KL-divergence medida sobre 10 trozos de 8192 tokens de código
   (C++, Rust, Python) y el SDD: KLD media 0.0040, PPL +0.16%. El LLM-juez de
-  AGENTS.md 11.5 (≥4/5 en 50 prompts) queda pendiente: el juez del SDD
-  (Qwen2.5-72B) no cabe en el hardware disponible.
+  AGENTS.md 11.5 (≥4/5 en 50 prompts) se hace con opencode (ADR-0009) y está
+  pendiente de completarse.
 - Si la VRAM aprieta, RF-08b puede bajar K a `q8_0` antes de recortar contexto.
