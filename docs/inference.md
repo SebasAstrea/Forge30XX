@@ -77,8 +77,98 @@ cargo test --release --test rf08_tool_calls -- --ignored --nocapture
 ```
 
 Resultado 2026-11-08, RTX 3050 6 GB, Qwen2.5-Coder-3B **Q8_0**: sin gramática
-17%, con gramática **100%** (umbral A: 90%). Pendiente repetirlo con Q4_K_M
-(el modelo del KPI) y con 7B en perfil B.
+17%, con gramática **100%** (umbral A: 90%).
+
+Resultado 2026-11-09, fork TurboQuant en 2x RTX 3060 12 GB (Fedora 44):
+
+| Modelo | KV | GPUs | Sin gramática | Con gramática | Umbral |
+|---|---|---|---:|---:|---:|
+| 3B Q4_K_M | turbo2 (32K) | 1 | 37% | **97%** | 90% (A) |
+| 7B Q4_K_M | turbo3 (64K) | 2 | 23% | **100%** | 95% (B) |
+
+El único fallo con gramática (3B) fue un `create_file` cortado por
+`max_tokens = 256` del test, no una violación de la gramática.
+
+## Compilar el fork en Linux
+
+ADR-0004 fija el fork. En Linux nativo (RNF-04b) con CUDA ≥12.1:
+
+```bash
+git clone --branch feature/turboquant-kv-cache --depth 1 \
+  https://github.com/TheTom/llama-cpp-turboquant.git
+cd llama-cpp-turboquant
+cmake -S . -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=86 \
+  -DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF
+cmake --build build -j --target llama-server llama-bench
+```
+
+`86` es Ampere (serie 30xx). Si la versión de GCC es más nueva que la que
+admite nvcc (GCC 16 con CUDA 13.3, p. ej.), añade
+`-DCMAKE_CUDA_FLAGS=-allow-unsupported-compiler`. Verificado con el commit
+`6439568` del fork, CUDA 13.3 y GCC 16.2.
+
+## Caché KV TurboQuant (RF-05)
+
+Los tipos `turbo2`…`turbo6` se eligen al arrancar el servidor con
+`-ctk`/`-ctv` y requieren flash attention (`-fa on`):
+
+```bash
+# Perfil A: 3B, 32K, turbo2
+llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf \
+  -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
+# Perfil B: 7B, 64K, turbo3, capas repartidas entre las dos GPUs
+llama-server -m models/qwen2.5-coder-7b-instruct-q4_k_m.gguf \
+  -c 65536 -ngl 99 -fa on -np 1 -ctk turbo3 -ctv turbo3 --port 8080
+```
+
+El fork cambia por su cuenta lo que se pide en dos casos, y el log lo avisa:
+
+- **Auto-asimetría** (`TURBO_AUTO_ASYMMETRIC=1` por defecto): con GQA alto
+  (Qwen2.5-3B 8:1, 7B 7:1) sube K a `q8_0` para no degradar la calidad.
+- **Boundary V** (`TURBO_LAYER_ADAPTIVE`): con V `turbo2`, las dos primeras y
+  dos últimas capas guardan V en `q8_0`.
+
+Con `TURBO_AUTO_ASYMMETRIC=0 TURBO_LAYER_ADAPTIVE=0` se obtiene el tipo pedido
+tal cual.
+
+### Medición 2026-11-09 (2x RTX 3060 12 GB de escritorio)
+
+Tamaño KV: línea `llama_kv_cache: size` del log de `llama-server -lv 4`.
+Velocidad: `llama-bench -fa 1 -p 0 -n 64 -d <profundidad>` (decodificación con
+la caché ya llena hasta esa profundidad).
+
+Perfil A, 3B Q4_K_M, 32K, una GPU (`CUDA_VISIBLE_DEVICES=0`):
+
+| K / V efectivo | KV a 32K | VRAM total | tok/s @4K | tok/s @32K |
+|---|---:|---:|---:|---:|
+| f16 / f16 | 1152 MiB | 3.27 GB | 116.4 | 85.8 |
+| q8_0 / turbo2 (por defecto al pedir turbo2) | 408 MiB | 2.53 GB | 100.1 | 50.4 |
+| turbo2 / turbo2 (auto-asimetría off) | 153 MiB | 2.28 GB | 107.9 | 79.0 |
+
+Perfil B, 7B Q4_K_M, 64K, dos GPUs (reparto por capas por defecto):
+
+| K / V efectivo | KV a 64K | VRAM GPU0 / GPU1 | tok/s @4K | tok/s @64K |
+|---|---:|---:|---:|---:|
+| f16 / f16 | 3584 MiB | 4.51 / 4.69 GB | 65.9 | 39.2 |
+| f16 / turbo3 | ≈2142 MiB¹ | — | 61.0 | 23.8 |
+| q8_0 / turbo3 (por defecto al pedir turbo3) | 1302 MiB | 3.31 / 3.66 GB | 57.3 | 17.7 |
+| turbo3 / turbo3 (auto-asimetría off) | 700 MiB | 3.71 / 4.09 GB | 49.5 | 16.9 |
+
+¹ Calculado (K f16 1792 MiB + V turbo3 350 MiB), no leído del log.
+
+Lectura frente a los KPI del SDD §1:
+
+- **KV VRAM** (A <1.5 GB a 32K, B <3 GB a 64K): se cumple con todas las
+  combinaciones turbo. En A también con f16, porque el GQA 8:1 de Qwen2.5-3B
+  ya deja la caché pequeña.
+- **Velocidad con contexto lleno** (A ≥12, B ≥22 tok/s): A la supera con
+  margen en esta GPU de escritorio. Falta medirla en una 3060 Laptop 6 GB.
+  En B, a 64K solo cumplen f16/f16 (que supera el KV de 3 GB) y
+  f16/turbo3 (23.8 tok/s, justo por encima).
+- **RF-06** (variación de velocidad <20% entre 4K y el contexto máximo): sin
+  ventana KV en GPU, la velocidad cae entre un 26% y un 69%.
+- La calidad de cada combinación no se ha medido todavía (AGENTS.md 11.5 exige
+  un LLM-juez ≥4/5 en 50 prompts para cambios de cuantización KV).
 
 ## Verificación
 

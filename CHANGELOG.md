@@ -42,6 +42,10 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   `rf08_tool_calls` contra modelo real: 100% parseables con gramática (Q8_0, 3B).
 - ADR-0003 (streaming en S1) y ADR-0004 (fork TheTom/llama-cpp-turboquant
   servido por HTTP/OpenAI, sin gRPC).
+- Medición de RF-05 y repetición de RF-08 con Q4_K_M (3B) y 7B en el fork
+  TurboQuant compilado en Linux (2x RTX 3060 12 GB): tablas en
+  `docs/inference.md`. KV de A y B dentro del KPI; en B a 64K solo f16/turbo3
+  llega a 22 tok/s; RF-08 97% (3B) y 100% (7B) con gramática.
 
 ### Changed
 
