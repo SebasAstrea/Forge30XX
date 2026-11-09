@@ -15,6 +15,16 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Perfil B recomienda `-ctk f16 -ctv turbo3` (ADR-0006): 23.8 tok/s a 64K con
   ~2.1 GB de KV; KL-divergence 0.0040 frente a f16/f16.
 - `@sveltejs/vite-plugin-svelte` 3 → 4 (ADR-0007): soporte oficial de Svelte 5.
+- LLM-juez: Qwen2.5-72B sustituido por un modelo gratuito de opencode
+  (ADR-0009).
+
+### Added
+
+- `python -m forge_ml.judge` (`generate` + `score`, reanudable con `--cache`):
+  LLM-juez de AGENTS.md 11.5 sobre el CLI de opencode, sin dependencias nuevas.
+- Test de aceptación de HU-03/HU-03b con el contexto lleno
+  (`orchestrator/tests/hu03_full_context.rs`, ignorado sin llama-server).
+  Perfil A 50.6 tok/s y 2538 MiB a 32K; perfil B 23.7 tok/s a 64K.
 
 ### Removed
 

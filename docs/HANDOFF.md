@@ -58,14 +58,28 @@
 | 2 | Perfil B con `-ctk f16 -ctv turbo3` | 0006 | `forge doctor`, docs. KLD 0.0040 vs f16 |
 | 3 | `@sveltejs/vite-plugin-svelte` 3 → 4 | 0007 | `frontend/package.json` |
 | 4 | Retirar `tonic` | 0008 | `Cargo.toml`, SDD §8 |
+| 5 | LLM-juez con opencode y modelo gratuito | 0009 | `python -m forge_ml.judge`, SDD §10 |
 
-Sin decisiones pendientes. Queda abierto: LLM-juez de AGENTS.md 11.5 para la
-caché KV (el juez Qwen2.5-72B no cabe en 2x12 GB; ¿otro juez o equipo?).
+### Pendiente del PO: método del LLM-juez (ADR-0009)
+
+La primera ejecución (perfil A, turbo2 frente a f16/f16) quedó a 44 de 50
+veredictos, con media 3.32:
+- **Cuota:** la gratuita de opencode se agota en unas 45 llamadas al día y es
+  compartida entre todos los modelos gratuitos.
+- **Método:** comparar con la respuesta f16 mide parecido, no calidad. Con
+  temperatura 0 ninguna respuesta coincidió con la de referencia, y los "2/5"
+  revisados eran respuestas válidas pero distintas.
+
+Respuestas ya generadas (reutilizables) en
+`~/Descargas/kl-work/judge/{a,b}-{ref,cand}.jsonl` de `warmachine`.
+Veredictos de A en `a-verdicts.jsonl`, que `score --cache` reanuda.
 
 ## Backlog inmediato (orden del SDD §6)
 
-- [ ] **S2 — KV Perfil A**: HU-03 en una 3060 Laptop 6 GB real (la velocidad
-      medida aquí es de escritorio). RF-05/RF-06 ya cumplen el criterio de VRAM.
+- [ ] **S2 — KV Perfil A**: test de aceptación `tests/hu03_full_context.rs`
+      en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
+      ejecutarlo en una 3060 Laptop 6 GB y cerrar el LLM-juez (ADR-0009).
+      RF-05 y RF-06 cumplen el criterio de VRAM.
 - [ ] **S3 — KV Perfil B + dual GPU**: RF-06b (reparto KV midiendo PCIe),
       HU-00b, HU-03b. Volver a medir f16/turbo3 tras el reparto (margen
       23.8 vs 22 tok/s).
