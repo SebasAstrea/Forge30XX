@@ -184,8 +184,45 @@ cada combinación se compara con `--kl-divergence-base base.bin --kl-divergence`
 | q8_0 / turbo3 | 2.358 | 0.0056 | 98.10% |
 | f16 / turbo2 | 2.369 | 0.0131 | 96.80% |
 
-El LLM-juez de AGENTS.md 11.5 (≥4/5 en 50 prompts) está pendiente: el juez del
-SDD (Qwen2.5-72B) no cabe en 2x12 GB.
+El LLM-juez de AGENTS.md 11.5 (≥4/5 en 50 prompts) usa opencode (ADR-0009):
+
+```bash
+# 1. Respuestas con la referencia y con la candidata (servidor del fork en :8080)
+PYTHONPATH=python python -m forge_ml.judge generate --out ref.jsonl --context <archivos...>
+PYTHONPATH=python python -m forge_ml.judge generate --out cand.jsonl --context <archivos...>
+# 2. Puntuación (reanudable con --cache)
+PYTHONPATH=python python -m forge_ml.judge score --reference ref.jsonl \
+  --candidate cand.jsonl --cache verdicts.jsonl --out report.json
+```
+
+Estado: sin completar. Ver los problemas de cuota y calibración en ADR-0009.
+
+## Aceptación de HU-03 / HU-03b con el contexto lleno
+
+`orchestrator/tests/hu03_full_context.rs` rellena el contexto hasta >90% con
+código real, genera 128 tokens y comprueba la velocidad de generación
+(`timings.predicted_per_second` del servidor) y la VRAM de `nvidia-smi`.
+Necesita el llama-server del fork arrancado con la configuración del perfil:
+
+```bash
+# Perfil A (umbrales por defecto: 32K, ≥12 tok/s, ≤5837 MiB en la GPU 0)
+FORGE_TEST_LLAMA_URL=http://127.0.0.1:8080 \
+  cargo test --release --test hu03_full_context -- --ignored --nocapture
+# Perfil B
+FORGE_TEST_CTX=65536 FORGE_TEST_MIN_TPS=22 FORGE_TEST_MAX_VRAM_MIB=11673 \
+FORGE_TEST_GPUS=0,1 FORGE_TEST_LLAMA_URL=http://127.0.0.1:8080 \
+  cargo test --release --test hu03_full_context -- --ignored --nocapture
+```
+
+Resultado 2026-11-09 (2x RTX 3060 12 GB de escritorio):
+
+| Perfil | Config | Prompt | tok/s | VRAM | Umbrales |
+|---|---|---:|---:|---|---|
+| A (1 GPU) | 3B, turbo2, 32K | 32 005 tok | 50.6 | 2538 MiB | ≥12 tok/s, ≤5837 MiB ✅ |
+| B (2 GPUs) | 7B, f16/turbo3, 64K | 64 902 tok | 23.7 | 3744 / 4028 MiB | ≥22 tok/s, ≤11 673 MiB ✅ |
+
+El perfil A se ha medido en una GPU de escritorio (360 GB/s y 170 W). En la
+3060 Laptop 6 GB hay que repetirlo para dar HU-03 por cerrada.
 
 ## Verificación
 
