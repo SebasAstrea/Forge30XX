@@ -213,7 +213,7 @@ ORCHESTRATOR Rust Axum+Tokio
   HardwareProfiler | RouterContexto | ToolExecutor+sandbox
   DegradationManager | SessionManager | Guardarrailes
   AuditLog | Metrics
-        | gRPC/HTTP | HTTP | FFI PyO3
+        | HTTP (API OpenAI) | HTTP | FFI PyO3
 INFERENCE C++/CUDA          RAG Python            ML Python
 llama.cpp fork TurboQuant   port-rag-potty        QLoRA (Unsloth)
 + KVFlash                   ChromaDB + Ollama     bge-m3 embeddings

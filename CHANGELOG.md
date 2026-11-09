@@ -7,6 +7,31 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [Unreleased]
 
+### Fixed
+
+- CI: `ci.yml` no era YAML válido (`: ` sin comillas en el job de bootstrap) y
+  GitHub lo rechazaba sin ejecutar ningún job desde el primer commit.
+- `forge chat` sin llama-server escuchando terminaba con error; ahora informa
+  y sale con código 0, como documenta `docs/inference.md`.
+- `make check` ignoraba el fallo de cobertura Rust (`|| echo`); ahora falla si
+  falta `cargo-llvm-cov` o si la cobertura baja del 80%.
+
+### Changed
+
+- Reglas de AGENTS.md 11.1 verificadas por linter: clippy `too_many_lines`
+  (≤40), `unwrap_used`/`expect_used` fuera de tests; ruff `C90` (≤10) y `T20`;
+  ESLint `complexity`, `max-lines-per-function`, `max-lines`; `make check-sizes`
+  (archivos ≤400, Svelte ≤150) también en CI.
+- `hardware::recommend` dividida en `select_tier` + `gpu_warnings` (73 → 21
+  líneas), mismo comportamiento.
+- Cobertura Rust de 69% a 96%: tests de `RagClient` e `InferenceClient` contra
+  un servidor HTTP falso compartido (`test_support`) y tests de la CLI
+  (`tests/cli.rs`).
+- `@eslint/js` declarado en `devDependencies` (ya estaba instalado como
+  dependencia transitiva de `eslint`, misma versión 9.39.5).
+- `inference/README.md`, `inference/CMakeLists.txt`, README y diagrama del SDD
+  alineados con ADR-0004 (fork TheTom, HTTP en lugar de gRPC).
+
 ### Added
 
 - Streaming de tokens (RF-18 adelantado a S1, ADR-0003): `InferenceClient::chat_stream`

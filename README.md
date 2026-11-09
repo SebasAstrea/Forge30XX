@@ -92,7 +92,7 @@ ORCHESTRATOR Rust Axum+Tokio
   HardwareProfiler | RouterContexto | ToolExecutor+sandbox
   DegradationManager | SessionManager | Guardarrailes
   AuditLog | Metrics
-        | gRPC/HTTP | HTTP | FFI PyO3
+        | HTTP (API OpenAI) | HTTP | FFI PyO3
 INFERENCE C++/CUDA          RAG Python            ML Python
 llama.cpp fork TurboQuant   port-rag-potty        QLoRA (Unsloth)
 + KVFlash                   ChromaDB + Ollama     bge-m3 embeddings
@@ -117,7 +117,7 @@ Componentes:
 | Capa | Tecnología |
 |---|---|
 | Orquestador | Rust 1.80+, Axum 0.7+, Tokio 1.40+, tonic 0.12+, PyO3 0.22+, rusqlite 0.31+, clap 4.5+ |
-| Inferencia | llama.cpp fork `atomicmilkshake/llama-cpp-turboquant`, CUDA 12.1+, CMake 3.28+ |
+| Inferencia | llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+ |
 | ML | Python 3.11+, PyTorch 2.4+, Unsloth, PEFT, bitsandbytes, FlagEmbedding (bge-m3), ChromaDB |
 | Frontend | SvelteKit 2.0+, TypeScript 5.5+, TailwindCSS 3.4+, CodeMirror 6, uPlot 1.6+ |
 | Infra | Docker + docker compose + nvidia-container-toolkit, GitHub Actions |
@@ -495,7 +495,7 @@ Uso personal y comercial permitido. Sin garantías. El autor no se responsabiliz
 
 ## Agradecimientos
 
-- [llama.cpp](https://github.com/ggerganov/llama.cpp) y el fork [TurboQuant](https://github.com/atomicmilkshake/llama-cpp-turboquant).
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) y el fork [TurboQuant](https://github.com/TheTom/llama-cpp-turboquant).
 - [Qwen](https://github.com/QwenLM/Qwen2.5-Coder) por los modelos base.
 - [Unsloth](https://github.com/unslothai/unsloth) por acelerar QLoRA.
 - [port-rag-potty](https://github.com/SebasAstrea/port-rag-potty) a mí mismo por el RAG portable XD.
