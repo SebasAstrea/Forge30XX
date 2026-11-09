@@ -78,7 +78,7 @@ Prohibido: improvisar decisiones de arquitectura, asumir stack, añadir/quitar R
 - Cambios en kernels CUDA requieren benchmark antes/después en CI hardware (3060 6 GB y 2x3060).
 - Sin `malloc`/`new` en hot path; usar memoria gestionada por llama.cpp.
 - Errores CUDA chequeados con macro `CUDA_CHECK`.
-- No modificar kernels de TurboQuant/KVFlash sin test de regresión numérica (comparar salida vs versión anterior en 100 prompts).
+- No modificar kernels de TurboQuant sin test de regresión numérica (comparar salida vs versión anterior en 100 prompts).
 
 #### TypeScript (frontend)
 - `strict: true`, sin `any`, sin `as` innecesario.

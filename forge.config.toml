@@ -9,8 +9,8 @@ kv_split_ratio = 0.6       # Perfil B: fracción de KV en GPU0
 [model]
 path = "models/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
 context_size = 32768
-quantization = "turbo2"    # turbo2, turbo3, turbo4
-kvflash_window = 4096      # 4096 (A), 8192 (B)
+kv_type_k = "turbo2"       # -ctk del llama-server. A: turbo2; B: f16 (ADR-0006)
+kv_type_v = "turbo2"       # -ctv del llama-server. A: turbo2; B: turbo3
 
 [inference]
 base_url = "http://127.0.0.1:8080"

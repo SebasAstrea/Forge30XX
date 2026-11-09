@@ -1,8 +1,7 @@
 # Detección de hardware y selección de perfil (RF-00, RF-21b, HU-00)
 
 `forge doctor` detecta las GPUs NVIDIA del sistema y recomienda una
-configuración óptima (perfil, modelo, contexto, cuantización KV, ventana
-KVFlash) según la matriz del SDD §2, avisando de condiciones subóptimas.
+configuración óptima (perfil, modelo, contexto y tipos de caché K/V) según la matriz del SDD §2, avisando de condiciones subóptimas.
 
 ## Diseño
 
@@ -16,13 +15,16 @@ KVFlash) según la matriz del SDD §2, avisando de condiciones subóptimas.
 
 ## Matriz de decisión (SDD §2)
 
-| GPU detectada            | VRAM  | Perfil  | Modelo                  | Contexto | KV      | KVFlash |
-| ------------------------ | ----- | ------- | ----------------------- | -------- | ------- | ------- |
-| 3060 Laptop              | 6 GB  | A       | Qwen2.5-Coder-3B Q4_K_M | 32 768   | turbo2  | 4 096   |
-| 3070 / 3070 Ti           | 8 GB  | A+      | 3B Q5_K_M               | 40 960   | turbo2  | 4 096   |
-| 3060 12 GB / 3080 10 GB  | 10-12 | A+      | 7B Q4_K_M               | 49 152   | turbo3  | 8 192   |
-| 2x 3060 12 GB            | 24    | B       | 7B Q4_K_M               | 65 536   | turbo3  | 8 192   |
-| 3080 Ti / 3090           | ≥24   | Premium | 7B Q5_K_M               | 100 000  | turbo3  | 8 192   |
+| GPU detectada            | VRAM  | Perfil  | Modelo                  | Contexto | KV (K / V)      |
+| ------------------------ | ----- | ------- | ----------------------- | -------- | --------------- |
+| 3060 Laptop              | 6 GB  | A       | Qwen2.5-Coder-3B Q4_K_M | 32 768   | turbo2 / turbo2 |
+| 3070 / 3070 Ti           | 8 GB  | A+      | 3B Q5_K_M               | 40 960   | turbo2 / turbo2 |
+| 3060 12 GB / 3080 10 GB  | 10-12 | A+      | 7B Q4_K_M               | 49 152   | turbo3 / turbo3 |
+| 2x 3060 12 GB            | 24    | B       | 7B Q4_K_M               | 65 536   | f16 / turbo3    |
+| 3080 Ti / 3090           | ≥24   | Premium | 7B Q5_K_M               | 100 000  | turbo3 / turbo3 |
+
+El perfil B usa K en f16 (ADR-0006). No hay ventana KV: el contexto completo
+vive en VRAM (ADR-0005).
 
 Avisos (RF-21b): TGP < 100 W, GPU fuera de la serie 30xx, VRAM < 6 GiB.
 
@@ -42,8 +44,7 @@ forge doctor — configuración recomendada
   Perfil         : A
   Modelo         : Qwen2.5-Coder-3B Q4_K_M
   Contexto       : 32768 tokens
-  Cuantización KV: turbo2
-  Ventana KVFlash: 4096 tokens
+  Caché KV (K/V) : turbo2 / turbo2
   Avisos         :
     - GPU 'NVIDIA GeForce RTX 3060 Laptop GPU' con TGP 80 W (<100 W): ...
 

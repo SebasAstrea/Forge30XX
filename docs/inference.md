@@ -116,9 +116,9 @@ Los tipos `turbo2`…`turbo6` se eligen al arrancar el servidor con
 # Perfil A: 3B, 32K, turbo2
 llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf \
   -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
-# Perfil B: 7B, 64K, turbo3, capas repartidas entre las dos GPUs
+# Perfil B: 7B, 64K, K f16 + V turbo3 (ADR-0006), capas repartidas entre las dos GPUs
 llama-server -m models/qwen2.5-coder-7b-instruct-q4_k_m.gguf \
-  -c 65536 -ngl 99 -fa on -np 1 -ctk turbo3 -ctv turbo3 --port 8080
+  -c 65536 -ngl 99 -fa on -np 1 -ctk f16 -ctv turbo3 --port 8080
 ```
 
 El fork cambia por su cuenta lo que se pide en dos casos, y el log lo avisa:
@@ -165,10 +165,27 @@ Lectura frente a los KPI del SDD §1:
   margen en esta GPU de escritorio. Falta medirla en una 3060 Laptop 6 GB.
   En B, a 64K solo cumplen f16/f16 (que supera el KV de 3 GB) y
   f16/turbo3 (23.8 tok/s, justo por encima).
-- **RF-06** (variación de velocidad <20% entre 4K y el contexto máximo): sin
-  ventana KV en GPU, la velocidad cae entre un 26% y un 69%.
-- La calidad de cada combinación no se ha medido todavía (AGENTS.md 11.5 exige
-  un LLM-juez ≥4/5 en 50 prompts para cambios de cuantización KV).
+- **RF-06** (ADR-0005): el contexto máximo cabe entero en VRAM en A y B. La
+  velocidad cae entre un 26% y un 69% de 4K al máximo; se acepta mientras se
+  cumpla RNF-01.
+- **Perfil B** usa f16/turbo3 (ADR-0006).
+
+### Calidad: KL-divergence frente a f16/f16 (7B, perfil B)
+
+`llama-perplexity --kl-divergence` sobre 10 trozos de 8192 tokens de código
+(C++ del fork, Rust y Python del repo) y el SDD. Primero se guardan los logits
+de referencia con `-ctk f16 -ctv f16 --kl-divergence-base base.bin`; después
+cada combinación se compara con `--kl-divergence-base base.bin --kl-divergence`.
+
+| K / V | PPL | KLD media | Mismo top-1 |
+|---|---:|---:|---:|
+| f16 / f16 (referencia) | 2.350 | — | — |
+| **f16 / turbo3** | 2.354 | **0.0040** | **98.25%** |
+| q8_0 / turbo3 | 2.358 | 0.0056 | 98.10% |
+| f16 / turbo2 | 2.369 | 0.0131 | 96.80% |
+
+El LLM-juez de AGENTS.md 11.5 (≥4/5 en 50 prompts) está pendiente: el juez del
+SDD (Qwen2.5-72B) no cabe en 2x12 GB.
 
 ## Verificación
 

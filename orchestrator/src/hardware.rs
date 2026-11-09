@@ -75,10 +75,10 @@ pub struct Recommendation {
     pub model: String,
     /// Tamaño de contexto en tokens.
     pub context_tokens: u32,
-    /// Cuantización KV (turbo2/turbo3).
-    pub kv_quant: String,
-    /// Ventana KVFlash en tokens.
-    pub kvflash_window: u32,
+    /// Tipo de la caché K (`-ctk` del llama-server).
+    pub kv_type_k: String,
+    /// Tipo de la caché V (`-ctv` del llama-server).
+    pub kv_type_v: String,
     /// Avisos para el usuario (p. ej. TGP bajo, GPU no soportada).
     pub warnings: Vec<String>,
 }
@@ -113,8 +113,8 @@ pub fn recommend(gpus: &[Gpu]) -> Result<Recommendation, HardwareError> {
         profile: tier.profile,
         model: tier.model.to_string(),
         context_tokens: tier.context_tokens,
-        kv_quant: tier.kv_quant.to_string(),
-        kvflash_window: tier.kvflash_window,
+        kv_type_k: tier.kv_type_k.to_string(),
+        kv_type_v: tier.kv_type_v.to_string(),
         warnings,
     })
 }
@@ -124,44 +124,45 @@ struct Tier {
     profile: Profile,
     model: &'static str,
     context_tokens: u32,
-    kv_quant: &'static str,
-    kvflash_window: u32,
+    kv_type_k: &'static str,
+    kv_type_v: &'static str,
 }
 
 const TIER_B: Tier = Tier {
     profile: Profile::B,
     model: "Qwen2.5-Coder-7B Q4_K_M",
     context_tokens: 65_536,
-    kv_quant: "turbo3",
-    kvflash_window: 8_192,
+    // ADR-0006: K en f16 para mantener ≥22 tok/s a 64K.
+    kv_type_k: "f16",
+    kv_type_v: "turbo3",
 };
 const TIER_PREMIUM: Tier = Tier {
     profile: Profile::Premium,
     model: "Qwen2.5-Coder-7B Q5_K_M",
     context_tokens: 100_000,
-    kv_quant: "turbo3",
-    kvflash_window: 8_192,
+    kv_type_k: "turbo3",
+    kv_type_v: "turbo3",
 };
 const TIER_A_PLUS_10: Tier = Tier {
     profile: Profile::APlus,
     model: "Qwen2.5-Coder-7B Q4_K_M",
     context_tokens: 49_152,
-    kv_quant: "turbo3",
-    kvflash_window: 8_192,
+    kv_type_k: "turbo3",
+    kv_type_v: "turbo3",
 };
 const TIER_A_PLUS_8: Tier = Tier {
     profile: Profile::APlus,
     model: "Qwen2.5-Coder-3B Q5_K_M",
     context_tokens: 40_960,
-    kv_quant: "turbo2",
-    kvflash_window: 4_096,
+    kv_type_k: "turbo2",
+    kv_type_v: "turbo2",
 };
 const TIER_A: Tier = Tier {
     profile: Profile::A,
     model: "Qwen2.5-Coder-3B Q4_K_M",
     context_tokens: 32_768,
-    kv_quant: "turbo2",
-    kvflash_window: 4_096,
+    kv_type_k: "turbo2",
+    kv_type_v: "turbo2",
 };
 
 fn select_tier(vram_gib: u32, dual: bool) -> &'static Tier {
@@ -260,8 +261,10 @@ mod tests {
             .expect("recommend");
         assert_eq!(rec.profile, Profile::A);
         assert_eq!(rec.context_tokens, 32_768);
-        assert_eq!(rec.kv_quant, "turbo2");
-        assert_eq!(rec.kvflash_window, 4_096);
+        assert_eq!(
+            (rec.kv_type_k.as_str(), rec.kv_type_v.as_str()),
+            ("turbo2", "turbo2")
+        );
         // TGP 80 W < 100 W → debe avisar (RF-21b).
         assert!(rec.warnings.iter().any(|w| w.contains("TGP")));
     }
@@ -283,8 +286,12 @@ mod tests {
         .expect("rec");
         assert_eq!(rec.profile, Profile::B);
         assert_eq!(rec.context_tokens, 65_536);
-        assert_eq!(rec.kv_quant, "turbo3");
-        assert_eq!(rec.kvflash_window, 8_192);
+        // ADR-0006: K f16 + V turbo3 es la única combinación medida que cumple
+        // KV <3 GB y ≥22 tok/s a 64K.
+        assert_eq!(
+            (rec.kv_type_k.as_str(), rec.kv_type_v.as_str()),
+            ("f16", "turbo3")
+        );
     }
 
     #[test]

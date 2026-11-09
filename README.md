@@ -55,7 +55,7 @@ Los agentes de codificación en la nube son caros, lentos y filtran código prop
 Forge30XX ataca los tres frentes:
 
 - QLoRA para especializar modelos pequeños en tool-calling.
-- TurboQuant + KVFlash para comprimir la caché KV y mantener el contexto.
+- TurboQuant para comprimir la caché KV y mantener el contexto completo en VRAM.
 - port-rag-potty para reducir el contexto efectivo por consulta.
 - Degradación con gracia: nunca falla por OOM, siempre avisa y se adapta.
 
@@ -95,7 +95,7 @@ ORCHESTRATOR Rust Axum+Tokio
         | HTTP (API OpenAI) | HTTP | FFI PyO3
 INFERENCE C++/CUDA          RAG Python            ML Python
 llama.cpp fork TurboQuant   port-rag-potty        QLoRA (Unsloth)
-+ KVFlash                   ChromaDB + Ollama     bge-m3 embeddings
+                            ChromaDB + Ollama     bge-m3 embeddings
                             bge-m3                guard model <150M
                                                   router classifier
         | CUDA
@@ -105,7 +105,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 Componentes:
 
 - Orquestador en Rust (Axum + Tokio): concurrencia, latencia predecible, seguridad de memoria.
-- Inferencia en C++/CUDA vía llama.cpp fork con TurboQuant y KVFlash.
+- Inferencia en C++/CUDA vía llama.cpp fork con TurboQuant.
 - Módulos ML en Python (PyO3): QLoRA, embeddings, guard model, router classifier.
 - RAG en Python: port-rag-potty sobre ChromaDB + Ollama con bge-m3.
 - Frontend en SvelteKit + TypeScript: streaming SSE, CodeMirror 6, uPlot.
@@ -116,7 +116,7 @@ Componentes:
 
 | Capa | Tecnología |
 |---|---|
-| Orquestador | Rust 1.80+, Axum 0.7+, Tokio 1.40+, tonic 0.12+, PyO3 0.22+, rusqlite 0.31+, clap 4.5+ |
+| Orquestador | Rust 1.80+, Axum 0.7+, Tokio 1.40+, PyO3 0.22+, rusqlite 0.31+, clap 4.5+ |
 | Inferencia | llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+ |
 | ML | Python 3.11+, PyTorch 2.4+, Unsloth, PEFT, bitsandbytes, FlagEmbedding (bge-m3), ChromaDB |
 | Frontend | SvelteKit 2.0+, TypeScript 5.5+, TailwindCSS 3.4+, CodeMirror 6, uPlot 1.6+ |
@@ -250,8 +250,8 @@ kv_split_ratio = 0.6       # Perfil B: fracción de KV en GPU0
 [model]
 path = "models/qwen2.5-coder-3b-instruct-q4_k_m.gguf"
 context_size = 32768
-quantization = "turbo2"    # turbo2, turbo3, turbo4
-kvflash_window = 4096      # 4096 (A), 8192 (B)
+kv_type_k = "turbo2"       # -ctk del llama-server. A: turbo2; B: f16 (ADR-0006)
+kv_type_v = "turbo2"       # -ctv del llama-server. A: turbo2; B: turbo3
 
 [inference]
 temperature = 0.2
@@ -297,8 +297,7 @@ FORGE_LOG_LEVEL=info
 ### Perfil A: RTX 3060 6 GB Laptop
 
 - Modelo: Qwen2.5-Coder-3B Q4_K_M (~1.9 GB).
-- KV: TurboQuant `turbo2` (~1.3 GB a 32K).
-- KVFlash: ventana 4K.
+- KV: TurboQuant `turbo2` (0.15–0.41 GB medidos a 32K).
 - Overhead: ~0.8 GB.
 - Total: ~5.7 GB (95% de VRAM).
 - Velocidad objetivo: >= 12 tok/s con contexto lleno.
@@ -306,8 +305,7 @@ FORGE_LOG_LEVEL=info
 ### Perfil B: 2x RTX 3060 12 GB
 
 - Modelo: Qwen2.5-Coder-7B Q4_K_M (~4.4 GB) en GPU0.
-- KV: TurboQuant `turbo3` repartida GPU0/GPU1 midiendo PCIe.
-- KVFlash: ventana 8K en GPU0.
+- KV: K `f16` + V `turbo3` (~2.1 GB a 64K, ADR-0006) repartida GPU0/GPU1 midiendo PCIe.
 - Total: <= 11.4 GB por GPU.
 - Velocidad objetivo: >= 22 tok/s con contexto lleno.
 - Fallback: si GPU1 en PCIe x4, KV a RAM, contexto 48K, >= 18 tok/s.
@@ -385,7 +383,7 @@ Umbrales bloqueantes:
 ### v1.0 (actual)
 
 - Detección de hardware y perfiles A/B.
-- Inferencia con TurboQuant + KVFlash.
+- Inferencia con TurboQuant (caché KV cuantizada).
 - QLoRA para tool-calling.
 - Tool-calls: leer, editar, crear, borrar, buscar web, shell sandbox, RAG.
 - UI web + CLI.

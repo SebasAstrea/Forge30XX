@@ -98,8 +98,7 @@ fn print_recommendation(rec: &Recommendation) {
     println!("  Perfil         : {}", rec.profile.label());
     println!("  Modelo         : {}", rec.model);
     println!("  Contexto       : {} tokens", rec.context_tokens);
-    println!("  Cuantización KV: {}", rec.kv_quant);
-    println!("  Ventana KVFlash: {} tokens", rec.kvflash_window);
+    println!("  Caché KV (K/V) : {} / {}", rec.kv_type_k, rec.kv_type_v);
     if rec.warnings.is_empty() {
         println!("  Avisos         : ninguno");
     } else {

@@ -36,7 +36,7 @@ Regla: ante ambigüedad entre este documento y una instrucción del PO, prevalec
 
 Convertir un modelo abierto (Qwen2.5-Coder-3B en A, 7B en B) en agente de codificación autónomo: leer, editar, crear, borrar archivos; buscar docs web; navegar repos. Todo local, sin nube.
 
-Problema: agentes en nube son caros y filtran código. Intentos locales fallan por (a) modelos 7B+ no caben en 6 GB, (b) contexto largo agota VRAM, (c) mala gestión multi-turno. Solución: QLoRA para especialización, TurboQuant+KVFlash para contexto, port-rag-potty para reducir contexto efectivo, degradación con gracia bajo OOM.
+Problema: agentes en nube son caros y filtran código. Intentos locales fallan por (a) modelos 7B+ no caben en 6 GB, (b) contexto largo agota VRAM, (c) mala gestión multi-turno. Solución: QLoRA para especialización, TurboQuant (caché KV cuantizada) para contexto, port-rag-potty para reducir contexto efectivo, degradación con gracia bajo OOM.
 
 ### KPIs
 
@@ -64,11 +64,11 @@ AMD/Intel/40xx/50xx. Entrenamiento desde cero. Multimodalidad. Nube/multi-tenant
 
 ### Perfil A: RTX 3060 6 GB Laptop
 - 6 GB GDDR6, TGP 85-115 W, ~192 GB/s, RAM sistema ≥16 GB.
-- Estrategia: 3B Q4 (~1.9 GB) + KV turbo2 (~1.3 GB) + overhead (~0.8 GB). KVFlash ventana 4K en GPU. Offload capas a RAM vía mmap.
+- Estrategia: 3B Q4 (~1.9 GB) + KV turbo2 (0.15–0.41 GB medidos a 32K, `docs/inference.md`) + overhead (~0.8 GB). Contexto completo en GPU (ADR-0005). Offload capas a RAM vía mmap.
 
 ### Perfil B: 2x RTX 3060 12 GB
 - 24 GB total, sin NVLink, PCIe gen3/4, comunicación vía host.
-- Estrategia: 7B Q4 (~4.4 GB) en GPU0. KV turbo3 repartida GPU0/GPU1 midiendo ancho PCIe real. KVFlash ventana 8K en GPU0.
+- Estrategia: 7B Q4 (~4.4 GB) en GPU0. KV con K f16 + V turbo3 (ADR-0006) repartida GPU0/GPU1 midiendo ancho PCIe real. Contexto completo en GPU (ADR-0005).
 - Fallback: si GPU1 en PCIe x4, mover KV a RAM; GPU1 solo offload capas. Contexto 48K, ≥18 tok/s.
 
 ### Matriz compatibilidad
@@ -103,11 +103,11 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 
 ### 3.3 Inferencia y contexto
 - RF-05 | Integrar llama-cpp-turboquant; turbo2 (A) / turbo3 (B) | Must | * | A: 32K → <1.5 GB KV. B: 64K → <3 GB KV.
-- RF-06 | KVFlash ventana configurable (4K A, 8K B) | Must | * | Velocidad varía <20% entre 4K y contexto máximo.
+- RF-06 | Contexto máximo (32K A, 64K B) con toda la caché KV en VRAM, vía TurboQuant + flash attention, sin ventana (ADR-0005) | Must | * | KV a contexto máximo dentro del KPI (A <1.5 GB, B <3 GB). La velocidad con contexto lleno la cubre RNF-01.
 - RF-06b | Repartir KV entre 2 GPUs midiendo PCIe real | Must | B | Proporción maximiza tok/s; si PCIe x4, KV a RAM y registra.
 - RF-07 | API OpenAI (`/v1/chat/completions`, `/v1/models`) sobre llama-server | Must | * | Cliente `openai` Python sin cambios.
 - RF-08 | Gramática GBNF para tool-calls JSON/XML | Must | * | ≥90% (A) / ≥95% (B) parseables.
-- RF-08b | Bajo VRAM ≥90%: reducir ventana KVFlash, turbo3→turbo2, o contexto 24K/48K | Must | * | Sigue respondiendo; registra degradación.
+- RF-08b | Bajo VRAM ≥90%: turbo3→turbo2 o contexto 24K/48K | Must | * | Sigue respondiendo; registra degradación.
 
 ### 3.4 Tool-calling
 - RF-09 | Leer archivos rutas relativas, límite configurable | Must | * | 10 MB por streaming sin bloquear.
@@ -163,7 +163,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 
 ## 5. Historias de Usuario
 
-- HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, 3B Q4, 32K, turbo2, KVFlash 4K, aviso TGP<100W. B: 7B Q4, 64K, turbo3, KVFlash 8K, reparto medido | 5 pts
+- HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, 3B Q4, 32K, KV turbo2, aviso TGP<100W. B: 7B Q4, 64K, KV f16/turbo3, reparto medido | 5 pts
 - HU-00b | 2x3060: reparto automático entre GPUs | 7B en GPU0; KV mide PCIe; si x4, KV a RAM y registra | 8 pts
 - HU-01 | 3060 6 GB: entrenar LoRA 3B sin OOM | `make train-lora PROFILE=A` sin OOM batch 8; manifest completo; ≥90% tool-calls válidas | 13 pts
 - HU-02 | 2x3060: entrenar 7B usando ambas | device_map=auto <6 h; ≥95% válidas | 8 pts
@@ -187,7 +187,7 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 | S0 (1 sem) | Bootstrap | repo, CI, Docker, esqueleto Rust+Python, AGENTS.md, licencia | docker compose up hello world Rust+Python |
 | S0b | Detección hardware | RF-00, RF-00b, RF-21b, HU-00 | doctor imprime A y B correctos en CI |
 | S1 | Inferencia mínima | RF-01, RF-07, RF-08, streaming de tokens de RF-18 (ADR-0003) | Chat 3B (A)/7B (B) vía API OpenAI con streaming |
-| S2 | KV Perfil A | RF-05 turbo2, RF-06 KVFlash 4K, HU-03 | 32K en <1.5 GB KV en 3060 6 GB |
+| S2 | KV Perfil A | RF-05 turbo2, RF-06 (ADR-0005), HU-03 | 32K en <1.5 GB KV en 3060 6 GB |
 | S3 | KV Perfil B + dual | RF-05 turbo3, RF-06, RF-06b, HU-00b, HU-03b | 64K repartido en 2x3060 |
 | S4 | QLoRA A | RF-03, RF-03b, HU-01 | LoRA 3B <4 h en 6 GB |
 | S5 | QLoRA B + merge | RF-03 B, RF-04, HU-02 | LoRA 7B en 2x3060 + merge GGUF |
@@ -216,7 +216,7 @@ ORCHESTRATOR Rust Axum+Tokio
         | HTTP (API OpenAI) | HTTP | FFI PyO3
 INFERENCE C++/CUDA          RAG Python            ML Python
 llama.cpp fork TurboQuant   port-rag-potty        QLoRA (Unsloth)
-+ KVFlash                   ChromaDB + Ollama     bge-m3 embeddings
+                            ChromaDB + Ollama     bge-m3 embeddings
                             bge-m3                guard model <150M
                                                   router classifier
         | CUDA
@@ -227,7 +227,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 
 - ADR-01: Orquestador Rust (Axum+Tokio) por I/O y CPU-bound, latencia predecible, seguridad memoria.
 - ADR-02: ML en Python con PyO3 (sin overhead subprocesos).
-- ADR-03: Inferencia C++/CUDA vía llama.cpp fork (control kernels TurboQuant, KVFlash). Fork concreto: `TheTom/llama-cpp-turboquant` (ver `adr/0004`).
+- ADR-03: Inferencia C++/CUDA vía llama.cpp fork (control kernels TurboQuant). Fork concreto: `TheTom/llama-cpp-turboquant` (ver `adr/0004`).
 - ADR-04: Frontend SvelteKit+TS (bundle pequeño, streaming SSE).
 - ADR-05: HTTP para RAG. Inferencia también por HTTP (API OpenAI + SSE), no gRPC (modificada por `adr/0004`).
 - ADR-06: Docker Compose + nvidia-container-toolkit.
@@ -235,6 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 
@@ -255,7 +256,7 @@ Cualquier ADR nueva o modificación de las existentes requiere aprobación del P
 ## 8. Stack
 
 ### Orquestador (I/O y CPU-bound)
-Rust 1.80+, Axum 0.7+, Tokio 1.40+, tonic 0.12+, PyO3 0.22+, serde/serde_json, rusqlite 0.31+, clap 4.5+, metrics+metrics-exporter-prometheus, tracing+tracing-subscriber.
+Rust 1.80+, Axum 0.7+, Tokio 1.40+, PyO3 0.22+, serde/serde_json, rusqlite 0.31+, clap 4.5+, metrics+metrics-exporter-prometheus, tracing+tracing-subscriber.
 
 ### Inferencia (C++/CUDA)
 llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+ con -DGGML_CUDA=ON, llama-server vía HTTP/API OpenAI.
@@ -264,7 +265,7 @@ llama.cpp fork `TheTom/llama-cpp-turboquant` (ADR-0004), CUDA 12.1+, CMake 3.28+
 Python 3.11+, PyTorch 2.4+, Unsloth 2024.10+, PEFT 0.13+, bitsandbytes 0.44+, FlagEmbedding (bge-m3) vía Ollama, ModernBERT fine-tuned o Qwen3Guard-Gen-0.6B para guard, ChromaDB, pytest+pytest-cov+hypothesis, ruff+mypy.
 
 ### Frontend
-SvelteKit 2.0+, TypeScript 5.5+, TailwindCSS 3.4+, EventSource (SSE), CodeMirror 6, uPlot 1.6+, Vitest+Playwright.
+SvelteKit 2.0+ con @sveltejs/vite-plugin-svelte 4+ (ADR-0007), TypeScript 5.5+, TailwindCSS 3.4+, EventSource (SSE), CodeMirror 6, uPlot 1.6+, Vitest+Playwright.
 
 ### Infra
 Docker+docker compose+nvidia-container-toolkit, GitHub Actions (matrix 3060 6 GB Laptop, 3060 12 GB, 2x3060 12 GB en runners self-hosted), pre-commit (rustfmt, clippy, ruff, prettier), mdBook+Sphinx, SemVer+Conventional Commits.
