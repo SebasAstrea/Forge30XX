@@ -85,22 +85,8 @@ GPUs AMD, Intel y series 40xx/50xx no están soportadas en v1.0.
 
 ## Arquitectura
 
-```
-FRONTEND SvelteKit+TS (chat, visor, panel tool-calls, VRAM x GPU)
-        | HTTP/SSE localhost
-ORCHESTRATOR Rust Axum+Tokio
-  HardwareProfiler | RouterContexto | ToolExecutor+sandbox
-  DegradationManager | SessionManager | Guardarrailes
-  AuditLog | Metrics
-        | HTTP (API OpenAI) | HTTP | FFI PyO3
-INFERENCE C++/CUDA          RAG Python            ML Python
-llama.cpp fork TurboQuant   port-rag-potty        QLoRA (Unsloth)
-                            ChromaDB + Ollama     bge-m3 embeddings
-                            bge-m3                guard model <150M
-                                                  router classifier
-        | CUDA
-RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
-```
+![Arquitectura Forge30XX](docs/Architecture.jpg)
+
 
 Componentes:
 
