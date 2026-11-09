@@ -71,3 +71,40 @@ Prueba de 60 pasos, perfil A, 2026-11-09, una RTX 3060 12 GB de escritorio:
 Con ese ritmo, una época completa (1069 pasos) tarda unos 33 min, lejos del
 límite de 4 h de RF-03. El pico de 2.5 GB cabe en 6 GB, pero hay que
 confirmarlo en la 3060 Laptop (HU-01).
+
+Época completa, perfil A (`artifacts/lora/A-20261109T172555Z`):
+
+| Métrica | Valor |
+|---|---:|
+| Pasos | 1069 (batch efectivo 8) |
+| Pérdida de entrenamiento / evaluación | 0.040 / 0.030 |
+| Tiempo | 33 min 35 s |
+| Pico de VRAM | 2490 MiB |
+
+## Usar el adaptador en el llama-server
+
+```bash
+# Convertir a GGUF con el script del fork. --base-model-id toma la config del
+# modelo sin cuantizar: el script no admite bases bitsandbytes.
+cd llama-cpp-turboquant
+PYTHONPATH=gguf-py <venv-ml>/bin/python convert_lora_to_gguf.py \
+  --base-model-id Qwen/Qwen2.5-Coder-3B-Instruct --outtype f16 \
+  --outfile <run>/adapter-f16.gguf <run>/adapter
+# Servir el modelo base Q4_K_M con el adaptador
+llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf --lora <run>/adapter-f16.gguf \
+  -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
+```
+
+Test RF-08 (30 prompts que no están en el entrenamiento, system prompt
+distinto del de entrenamiento) en el mismo servidor, con y sin `--lora`:
+
+| | Sin gramática | Con gramática |
+|---|---:|---:|
+| 3B Q4_K_M, sin adaptador | 30% | 97% |
+| 3B Q4_K_M + adaptador A | **100%** | **100%** |
+
+HU-01 pide ≥90% de tool-calls válidos: se cumple incluso sin gramática.
+
+Riesgo para S6: el adaptador solo ha visto respuestas que son tool-calls. El
+bucle del agente también necesita turnos de respuesta final en texto, que
+habrá que añadir al dataset cuando exista ese flujo.

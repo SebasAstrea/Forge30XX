@@ -9,6 +9,8 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Changed (decisiones del PO 2026-11-09)
 
+- Con PCIe x4 o menor se mantiene el reparto por capas y `forge doctor` avisa;
+  la KV ya no se saca a RAM (ADR-0011).
 - RF-06 redefinido (ADR-0005): contexto completo en VRAM con TurboQuant, sin
   ventana KVFlash. `forge doctor` y `forge.config.toml` dejan de mostrar la
   ventana y pasan a indicar los tipos K y V por separado.
@@ -21,6 +23,10 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- QLoRA de tool-calling (RF-03, RF-03b, ADR-0012): `make dataset` (Glaive v2 +
+  sintético, con manifest) y `make train-lora PROFILE=A|B` con Unsloth. Perfil
+  A: época en 33.6 min con un pico de 2.5 GB; RF-08 sin gramática pasa del 30%
+  al 100% con el adaptador. Guía en `docs/training.md`.
 - `forge doctor` (RF-06b, HU-00b): lee el enlace PCIe de cada GPU, avisa si es
   x4 o menor con su ancho de banda estimado e imprime los flags del
   llama-server para el perfil. Medición del reparto entre dos GPUs en

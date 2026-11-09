@@ -76,17 +76,25 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
       en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
       ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez (ADR-0010).
       RF-05 y RF-06 cumplen el criterio de VRAM.
-- [ ] **S3 — KV Perfil B + dual GPU** (en curso):
+- [x] **S3 — KV Perfil B + dual GPU**:
   - [x] RF-06b medido: reparto por capas entre 70/30 y 50/50 da 23.4–23.6
         tok/s a 64K (`docs/inference.md#reparto-entre-dos-gpus-rf-06b`).
   - [x] `forge doctor` lee el enlace PCIe, avisa si es ≤x4 e imprime los
-        flags del llama-server para el perfil.
+        flags del llama-server para el perfil. Con PCIe ≤x4 se mantiene el
+        reparto por capas (ADR-0011).
   - [x] HU-03b: `tests/hu03_full_context.rs` en verde (23.7 tok/s a 64K).
-  - [ ] **Decisión PO**: el fallback del SDD para enlaces x4 ("KV a RAM",
-        RF-06b/HU-00b y SDD §2) da 0.6 tok/s medidos. Propuesta: mantener el
-        reparto por capas y solo avisar.
-- [ ] **S4/S5 — QLoRA A/B**: RF-03, RF-03b, RF-04. Stub en
-      `python/forge_ml/train.py`.
+- [ ] **S4 — QLoRA A** (`docs/training.md`):
+  - [x] Dataset Glaive v2 + sintético con manifest (ADR-0012):
+        `make dataset GLAIVE=...` → `artifacts/dataset-v1`.
+  - [x] `make train-lora PROFILE=A`: época completa en 33.6 min, pico de
+        2490 MiB (RTX 3060 12 GB de escritorio).
+  - [x] HU-01: RF-08 con el adaptador 100% sin gramática (30% sin adaptador).
+  - [ ] Repetir en la 3060 Laptop 6 GB (tiempo <4 h y sin OOM).
+- [ ] **S5 — QLoRA B + merge**: entrenamiento del 7B en dos GPUs lanzado el
+      2026-11-09 (`/tmp/train-full-b.log`, salida en `artifacts/lora/B-*`).
+      Falta evaluarlo con RF-08 (≥95%) y RF-04 (merge + export GGUF).
+- [ ] **Licencia por revisar (PO)**: Qwen2.5-Coder-3B-Instruct, el modelo del
+      perfil A, usa la licencia `qwen-research`, no Apache-2.0 como el 7B.
 - [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter
       (dependencia nueva → ADR + PO).
 - [ ] **S7 — RAG en orquestador**: cablear `rag::RagClient`/`RouterPolicy` a
