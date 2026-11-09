@@ -108,3 +108,55 @@ HU-01 pide ≥90% de tool-calls válidos: se cumple incluso sin gramática.
 Riesgo para S6: el adaptador solo ha visto respuestas que son tool-calls. El
 bucle del agente también necesita turnos de respuesta final en texto, que
 habrá que añadir al dataset cuando exista ese flujo.
+
+## Perfil B (HU-02)
+
+Época completa, 7B repartido entre las dos GPUs con `device_map="auto"`
+(`artifacts/lora/B-20261109T182023Z`):
+
+| Métrica | Valor |
+|---|---:|
+| Pasos | 1069 (batch efectivo 8) |
+| Pérdida de entrenamiento / evaluación | 0.038 / 0.027 |
+| Tiempo | 2 h 20 min (límite RF-03: 6 h) |
+| Pico de VRAM | 4746 MiB por GPU |
+
+El paso es ~4.5 veces más lento que en A (7.9 s frente a 1.85 s):
+`device_map="auto"` reparte las capas pero solo trabaja una GPU cada vez.
+
+RF-08 con 7B Q4_K_M, K f16 / V turbo3, 64K, dos GPUs:
+
+| | Sin gramática | Con gramática |
+|---|---:|---:|
+| Sin adaptador | 20% | 100% |
+| Con adaptador | **97%** | **100%** |
+| Fusionado y recuantizado a Q4_K_M | 97% | 100% |
+
+HU-02 pide ≥95%: se cumple sin gramática.
+
+## Fusión y exportación a GGUF (RF-04)
+
+```bash
+# Quitar las claves split.* que trae el GGUF del 7B: llama-export-lora las rechaza
+PYTHONPATH=gguf-py python gguf-py/gguf/scripts/gguf_new_metadata.py --force \
+  --remove-metadata split.no --remove-metadata split.count --remove-metadata split.tensors.count \
+  models/qwen2.5-coder-7b-instruct-q4_k_m.gguf base-nosplit.gguf
+llama-export-lora -m base-nosplit.gguf --lora <run>/adapter-f16.gguf -o merged-f16.gguf
+llama-quantize --allow-requantize merged-f16.gguf merged-q4_k_m.gguf Q4_K_M
+```
+
+Criterio de RF-04: ±2% frente al adaptador separado. Medido con la
+perplejidad de `eval.jsonl` (20 trozos de 4096 tokens, plantilla de chat de
+Qwen):
+
+| Modelo | PPL | Frente al adaptador |
+|---|---:|---:|
+| Base Q4_K_M sin adaptador | 1.3143 | +5.7% |
+| Base Q4_K_M + adaptador separado | 1.2432 | — |
+| Fusionado f16 (13.8 GB) | 1.2421 | −0.1% ✅ |
+| Fusionado y recuantizado a Q4_K_M (4.7 GB) | 1.2830 | **+3.2% ❌** |
+
+La fusión es correcta (f16 coincide con el adaptador), pero recuantizar un
+modelo que ya era Q4_K_M cuantiza dos veces y pierde un 3.2%. Para cumplir
+RF-04 hay que fusionar sobre los pesos de 16 bits del modelo base
+(`Qwen/Qwen2.5-Coder-7B-Instruct`, ~15 GB) y cuantizar a Q4_K_M una sola vez.

@@ -23,6 +23,10 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- QLoRA del perfil B (HU-02): 7B en dos GPUs en 2 h 20 min; RF-08 sin gramática
+  pasa del 20% al 97% con el adaptador. RF-04: la fusión en f16 coincide con el
+  adaptador separado, y el export a Q4_K_M requiere los pesos de 16 bits
+  (`docs/training.md`).
 - QLoRA de tool-calling (RF-03, RF-03b, ADR-0012): `make dataset` (Glaive v2 +
   sintético, con manifest) y `make train-lora PROFILE=A|B` con Unsloth. Perfil
   A: época en 33.6 min con un pico de 2.5 GB; RF-08 sin gramática pasa del 30%

@@ -90,9 +90,14 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
         2490 MiB (RTX 3060 12 GB de escritorio).
   - [x] HU-01: RF-08 con el adaptador 100% sin gramática (30% sin adaptador).
   - [ ] Repetir en la 3060 Laptop 6 GB (tiempo <4 h y sin OOM).
-- [ ] **S5 — QLoRA B + merge**: entrenamiento del 7B en dos GPUs lanzado el
-      2026-11-09 (`/tmp/train-full-b.log`, salida en `artifacts/lora/B-*`).
-      Falta evaluarlo con RF-08 (≥95%) y RF-04 (merge + export GGUF).
+- [ ] **S5 — QLoRA B + merge** (`docs/training.md#perfil-b-hu-02`):
+  - [x] HU-02: 7B en dos GPUs, época en 2 h 20 min, pico de 4746 MiB por
+        GPU. RF-08 con el adaptador: 97% sin gramática (20% sin adaptador).
+  - [x] RF-04, fusión: `llama-export-lora` en f16 coincide con el adaptador
+        (PPL −0.1%).
+  - [ ] RF-04, export Q4_K_M: recuantizar el Q4_K_M fusionado pierde un 3.2%
+        (>2%). Hay que fusionar sobre los pesos de 16 bits de
+        `Qwen/Qwen2.5-Coder-7B-Instruct` (~15 GB, la descarga la hace el PO).
 - [ ] **Licencia por revisar (PO)**: Qwen2.5-Coder-3B-Instruct, el modelo del
       perfil A, usa la licencia `qwen-research`, no Apache-2.0 como el 7B.
 - [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter
