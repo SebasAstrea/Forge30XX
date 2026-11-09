@@ -11,6 +11,8 @@ Cargo.lock.orig
 
 # === Python / ML ===
 .venv/
+.venv-ml/
+unsloth_compiled_cache/
 venv/
 __pycache__/
 *.py[cod]

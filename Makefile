@@ -13,9 +13,11 @@ HAS_PYTHON   := $(wildcard python/pyproject.toml)
 HAS_FRONTEND := $(wildcard frontend/package.json)
 
 PROFILE ?= A
+# Entorno con el extra [train] (docs/training.md); si no existe, el python del PATH.
+PYTHON_ML ?= $(if $(wildcard python/.venv-ml/bin/python),.venv-ml/bin/python,python)
 
 .PHONY: help check fmt lint test coverage bench \
-        test-a test-b train-lora doctor docs release e2e \
+        test-a test-b train-lora dataset doctor docs release e2e \
         check-sizes check-rust check-python check-frontend clean
 
 help: ## Muestra esta ayuda
@@ -103,8 +105,11 @@ train-lora: ## Entrena adaptador LoRA. Uso: make train-lora PROFILE=A|B
 ifeq ($(HAS_PYTHON),)
 	@echo "[train-lora] capa Python ausente — pendiente Sprint S4/S5."
 else
-	cd python && python -m forge_ml.train --profile $(PROFILE)
+	cd python && $(PYTHON_ML) -m forge_ml.train --profile $(PROFILE)
 endif
+
+dataset: ## Construye el dataset de tool-calling. Uso: make dataset GLAIVE=<glaive-function-calling-v2.json>
+	cd python && $(PYTHON_ML) -m forge_ml.dataset --glaive $(GLAIVE) --out ../artifacts/dataset-v1
 
 # =====================================================================
 # Detección de hardware

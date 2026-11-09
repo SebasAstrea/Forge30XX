@@ -43,3 +43,32 @@ shell_allowlist = ["ls", "cat", "grep", "find", "git", "cargo", "npm", "python"]
 [ui]
 port = 7860
 theme = "dark"
+
+[training]
+# QLoRA de tool-calling (RF-03, RF-03b, ADR-0012). `make train-lora PROFILE=A|B`.
+# Modelo base en Hugging Face y revisión fijada (RNF-09: hash del modelo base).
+dataset = "artifacts/dataset-v1"
+seed = 42
+
+[training.A]
+# RF-03b: Unsloth + QLoRA 4-bit + gradient checkpointing + paged_adamw_8bit, batch efectivo 8.
+base_model = "unsloth/Qwen2.5-Coder-3B-Instruct-bnb-4bit"
+revision = "84f4805873850233fe5b2b156d3e3435425b4098"
+max_seq_len = 2048
+batch_size = 2
+grad_accum = 4
+lora_r = 16
+lora_alpha = 32
+learning_rate = 0.0002
+epochs = 1
+
+[training.B]
+base_model = "unsloth/Qwen2.5-Coder-7B-Instruct-bnb-4bit"
+revision = "4858886f896bd05db823557fc5cbc4ac28342af7"
+max_seq_len = 2048
+batch_size = 2
+grad_accum = 4
+lora_r = 16
+lora_alpha = 32
+learning_rate = 0.0002
+epochs = 1

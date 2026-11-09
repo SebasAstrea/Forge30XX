@@ -15,13 +15,18 @@ dependencies = [
 
 # Dependencias de ML con GPU. Stack fijado en docs/SDD.md sección 8.
 # Se instalan en runners con GPU (ci-hardware.yml), no en CI estándar.
+# `train` es lo mínimo para `make train-lora` (docs/training.md). Instalar
+# torch primero: si no, pip se pierde probando versiones de unsloth.
 [project.optional-dependencies]
-ml = [
+train = [
   "torch>=2.4",
   "unsloth>=2024.10",
   "peft>=0.13",
   "bitsandbytes>=0.44",
   "safetensors>=0.4",
+]
+ml = [
+  "forge-python[train]",
   "FlagEmbedding>=1.2",
   "chromadb>=0.5",
 ]
@@ -53,6 +58,16 @@ max-complexity = 10
 python_version = "3.11"
 strict = true
 warn_unused_ignores = true
+
+# Paquetes del extra [ml] (solo en el entorno con GPU); sin stubs en CI estándar.
+[[tool.mypy.overrides]]
+module = ["unsloth", "unsloth.*", "trl", "datasets", "torch", "numpy", "huggingface_hub"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+# qlora.py necesita GPU y el extra [ml]: se valida con `make train-lora` en
+# hardware real (AGENTS.md 11.11), no en la CI estándar.
+omit = ["forge_ml/qlora.py"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
