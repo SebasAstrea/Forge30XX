@@ -16,7 +16,7 @@ PROFILE ?= A
 
 .PHONY: help check fmt lint test coverage bench \
         test-a test-b train-lora doctor docs release e2e \
-        check-rust check-python check-frontend clean
+        check-sizes check-rust check-python check-frontend clean
 
 help: ## Muestra esta ayuda
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -25,7 +25,18 @@ help: ## Muestra esta ayuda
 # =====================================================================
 # check = fmt + lint + test + coverage (AGENTS.md 11.9)
 # =====================================================================
-check: check-rust check-python check-frontend ## fmt + lint + test + coverage en todas las capas
+check: check-sizes check-rust check-python check-frontend ## fmt + lint + test + coverage en todas las capas
+
+# AGENTS.md 11.1 (archivos ≤400 líneas) y 11.3 (componentes Svelte ≤150).
+# Las funciones ≤40 líneas y la complejidad las verifica el linter de cada capa.
+SOURCES = git ls-files --cached --others --exclude-standard
+check-sizes: ## Límites de tamaño de archivo (AGENTS.md 11.1, 11.3)
+	@over=$$($(SOURCES) '*.rs' '*.py' '*.ts' '*.js' '*.svelte' | xargs -r wc -l \
+		| awk '$$2 != "total" && $$1 > 400'); \
+	svelte=$$($(SOURCES) '*.svelte' | xargs -r wc -l | awk '$$2 != "total" && $$1 > 150'); \
+	if [ -n "$$over$$svelte" ]; then \
+		echo "[check-sizes] archivos por encima del límite:"; echo "$$over"; echo "$$svelte"; exit 1; \
+	fi; echo "[check-sizes] ok"
 
 check-rust:
 ifeq ($(HAS_RUST),)
@@ -35,7 +46,9 @@ else
 	cd orchestrator && cargo fmt --all --check
 	cd orchestrator && cargo clippy --all-targets --all-features -- -D warnings
 	cd orchestrator && cargo test --all-features
-	cd orchestrator && cargo llvm-cov --fail-under-lines 80 || echo "[check-rust] instala cargo-llvm-cov para coverage"
+	@command -v cargo-llvm-cov >/dev/null 2>&1 \
+		|| { echo "[check-rust] falta cargo-llvm-cov: cargo install cargo-llvm-cov --locked"; exit 1; }
+	cd orchestrator && cargo llvm-cov --fail-under-lines 80
 endif
 
 check-python:

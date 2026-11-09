@@ -33,6 +33,13 @@ jobs:
           echo "python=$([[ -f python/pyproject.toml ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "frontend=$([[ -f frontend/package.json ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
+  sizes:
+    name: Límites de tamaño (AGENTS.md 11.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make check-sizes
+
   rust:
     name: Rust · fmt + clippy + test
     needs: detect-layers
@@ -119,4 +126,4 @@ jobs:
       needs.detect-layers.outputs.frontend == 'false'
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Fase bootstrap: aún no hay capas de código. CI en verde."
+      - run: 'echo "Fase bootstrap: aún no hay capas de código. CI en verde."'
