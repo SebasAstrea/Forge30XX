@@ -99,8 +99,84 @@ pub enum HardwareError {
 /// Implementa la matriz del SDD §2. Función pura: sin I/O, totalmente testeable.
 pub fn recommend(gpus: &[Gpu]) -> Result<Recommendation, HardwareError> {
     let first = gpus.first().ok_or(HardwareError::NoGpu)?;
-    let mut warnings = Vec::new();
+    let mut warnings = gpu_warnings(gpus);
+    let vram = first.vram_gib();
+    let dual = gpus.len() >= 2 && gpus.iter().all(|g| g.vram_gib() >= 12);
+    if !dual && vram < 6 {
+        warnings.push(format!(
+            "VRAM detectada {} GiB (<6 GiB): se degradará contexto para evitar OOM",
+            vram
+        ));
+    }
+    let tier = select_tier(vram, dual);
+    Ok(Recommendation {
+        profile: tier.profile,
+        model: tier.model.to_string(),
+        context_tokens: tier.context_tokens,
+        kv_quant: tier.kv_quant.to_string(),
+        kvflash_window: tier.kvflash_window,
+        warnings,
+    })
+}
 
+/// Fila de la matriz de compatibilidad (SDD §2).
+struct Tier {
+    profile: Profile,
+    model: &'static str,
+    context_tokens: u32,
+    kv_quant: &'static str,
+    kvflash_window: u32,
+}
+
+const TIER_B: Tier = Tier {
+    profile: Profile::B,
+    model: "Qwen2.5-Coder-7B Q4_K_M",
+    context_tokens: 65_536,
+    kv_quant: "turbo3",
+    kvflash_window: 8_192,
+};
+const TIER_PREMIUM: Tier = Tier {
+    profile: Profile::Premium,
+    model: "Qwen2.5-Coder-7B Q5_K_M",
+    context_tokens: 100_000,
+    kv_quant: "turbo3",
+    kvflash_window: 8_192,
+};
+const TIER_A_PLUS_10: Tier = Tier {
+    profile: Profile::APlus,
+    model: "Qwen2.5-Coder-7B Q4_K_M",
+    context_tokens: 49_152,
+    kv_quant: "turbo3",
+    kvflash_window: 8_192,
+};
+const TIER_A_PLUS_8: Tier = Tier {
+    profile: Profile::APlus,
+    model: "Qwen2.5-Coder-3B Q5_K_M",
+    context_tokens: 40_960,
+    kv_quant: "turbo2",
+    kvflash_window: 4_096,
+};
+const TIER_A: Tier = Tier {
+    profile: Profile::A,
+    model: "Qwen2.5-Coder-3B Q4_K_M",
+    context_tokens: 32_768,
+    kv_quant: "turbo2",
+    kvflash_window: 4_096,
+};
+
+fn select_tier(vram_gib: u32, dual: bool) -> &'static Tier {
+    match (dual, vram_gib) {
+        (true, _) => &TIER_B,
+        (false, 24..) => &TIER_PREMIUM,
+        (false, 10..) => &TIER_A_PLUS_10,
+        (false, 8..) => &TIER_A_PLUS_8,
+        (false, _) => &TIER_A,
+    }
+}
+
+/// Avisos por GPU: arquitectura no soportada o TGP por debajo del KPI.
+fn gpu_warnings(gpus: &[Gpu]) -> Vec<String> {
+    let mut warnings = Vec::new();
     for g in gpus {
         if !g.is_ampere_30xx() {
             warnings.push(format!(
@@ -108,73 +184,14 @@ pub fn recommend(gpus: &[Gpu]) -> Result<Recommendation, HardwareError> {
                 g.name
             ));
         }
-        if let Some(w) = g.power_limit_w {
-            if w < LOW_TGP_WATTS {
-                warnings.push(format!(
-                    "GPU '{}' con TGP {} W (<{} W): rendimiento por debajo del KPI",
-                    g.name, w, LOW_TGP_WATTS
-                ));
-            }
-        }
-    }
-
-    let vram = first.vram_gib();
-    let dual = gpus.len() >= 2 && gpus.iter().all(|g| g.vram_gib() >= 12);
-
-    let rec = if dual {
-        Recommendation {
-            profile: Profile::B,
-            model: "Qwen2.5-Coder-7B Q4_K_M".to_string(),
-            context_tokens: 65_536,
-            kv_quant: "turbo3".to_string(),
-            kvflash_window: 8_192,
-            warnings,
-        }
-    } else if vram >= 24 {
-        Recommendation {
-            profile: Profile::Premium,
-            model: "Qwen2.5-Coder-7B Q5_K_M".to_string(),
-            context_tokens: 100_000,
-            kv_quant: "turbo3".to_string(),
-            kvflash_window: 8_192,
-            warnings,
-        }
-    } else if vram >= 10 {
-        Recommendation {
-            profile: Profile::APlus,
-            model: "Qwen2.5-Coder-7B Q4_K_M".to_string(),
-            context_tokens: 49_152,
-            kv_quant: "turbo3".to_string(),
-            kvflash_window: 8_192,
-            warnings,
-        }
-    } else if vram >= 8 {
-        Recommendation {
-            profile: Profile::APlus,
-            model: "Qwen2.5-Coder-3B Q5_K_M".to_string(),
-            context_tokens: 40_960,
-            kv_quant: "turbo2".to_string(),
-            kvflash_window: 4_096,
-            warnings,
-        }
-    } else {
-        if vram < 6 {
+        if let Some(w) = g.power_limit_w.filter(|w| *w < LOW_TGP_WATTS) {
             warnings.push(format!(
-                "VRAM detectada {} GiB (<6 GiB): se degradará contexto para evitar OOM",
-                vram
+                "GPU '{}' con TGP {} W (<{} W): rendimiento por debajo del KPI",
+                g.name, w, LOW_TGP_WATTS
             ));
         }
-        Recommendation {
-            profile: Profile::A,
-            model: "Qwen2.5-Coder-3B Q4_K_M".to_string(),
-            context_tokens: 32_768,
-            kv_quant: "turbo2".to_string(),
-            kvflash_window: 4_096,
-            warnings,
-        }
-    };
-
-    Ok(rec)
+    }
+    warnings
 }
 
 /// Detecta las GPUs del sistema con `nvidia-smi` y recomienda configuración.

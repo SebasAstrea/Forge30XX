@@ -8,6 +8,9 @@
 //!
 //! Umbral: ≥90% (perfil A). Para perfil B usar `FORGE_TEST_MIN_RATE=0.95`.
 
+// Crate de test: todo su código es test, donde AGENTS.md 11.1 permite expect().
+#![allow(clippy::expect_used)]
+
 use std::time::Duration;
 
 use forge::inference::{InferenceClient, Message, SamplingParams};

@@ -43,7 +43,11 @@ line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W", "UP", "B", "SIM"]
+# C90: complejidad ciclomática ≤10 (AGENTS.md 11.1). T20: sin print() (11.3).
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "C90", "T20"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.mypy]
 python_version = "3.11"

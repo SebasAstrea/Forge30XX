@@ -6,6 +6,14 @@ import svelte from "eslint-plugin-svelte";
 export default [
   js.configs.recommended,
   {
+    // AGENTS.md 11.1: funciones ≤40 líneas, complejidad ≤10, archivos ≤400.
+    rules: {
+      complexity: ["error", 10],
+      "max-lines-per-function": ["error", { max: 40, skipBlankLines: false }],
+      "max-lines": ["error", { max: 400 }],
+    },
+  },
+  {
     files: ["**/*.ts"],
     languageOptions: { parser: tsParser },
     plugins: { "@typescript-eslint": ts },

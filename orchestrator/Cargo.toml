@@ -41,3 +41,14 @@ figment = { version = "0.10", features = ["toml", "env", "test"] }
 [profile.release]
 lto = true
 codegen-units = 1
+
+# Reglas verificables de AGENTS.md 11.1. Umbrales en clippy.toml.
+# La complejidad ciclomática (≤10) no se verifica en Rust: clippy solo ofrece
+# cognitive_complexity, que cuenta el código expandido de macros (tracing!,
+# println!) y da falsos positivos en funciones de dos ramas.
+[lints.clippy]
+too_many_lines = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"
