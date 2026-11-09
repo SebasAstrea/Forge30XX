@@ -21,6 +21,10 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- `forge doctor` (RF-06b, HU-00b): lee el enlace PCIe de cada GPU, avisa si es
+  x4 o menor con su ancho de banda estimado e imprime los flags del
+  llama-server para el perfil. Medición del reparto entre dos GPUs en
+  `docs/inference.md`.
 - `python -m forge_ml.judge` (`generate` + `score`, reanudable con `--cache`):
   LLM-juez de AGENTS.md 11.5 sobre el CLI de opencode, sin dependencias nuevas.
 - Test de aceptación de HU-03/HU-03b con el contexto lleno

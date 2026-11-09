@@ -76,9 +76,15 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
       en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
       ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez (ADR-0010).
       RF-05 y RF-06 cumplen el criterio de VRAM.
-- [ ] **S3 — KV Perfil B + dual GPU**: RF-06b (reparto KV midiendo PCIe),
-      HU-00b, HU-03b. Volver a medir f16/turbo3 tras el reparto (margen
-      23.8 vs 22 tok/s).
+- [ ] **S3 — KV Perfil B + dual GPU** (en curso):
+  - [x] RF-06b medido: reparto por capas entre 70/30 y 50/50 da 23.4–23.6
+        tok/s a 64K (`docs/inference.md#reparto-entre-dos-gpus-rf-06b`).
+  - [x] `forge doctor` lee el enlace PCIe, avisa si es ≤x4 e imprime los
+        flags del llama-server para el perfil.
+  - [x] HU-03b: `tests/hu03_full_context.rs` en verde (23.7 tok/s a 64K).
+  - [ ] **Decisión PO**: el fallback del SDD para enlaces x4 ("KV a RAM",
+        RF-06b/HU-00b y SDD §2) da 0.6 tok/s medidos. Propuesta: mantener el
+        reparto por capas y solo avisar.
 - [ ] **S4/S5 — QLoRA A/B**: RF-03, RF-03b, RF-04. Stub en
       `python/forge_ml/train.py`.
 - [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter

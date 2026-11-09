@@ -229,6 +229,46 @@ Resultado 2026-11-09 (2x RTX 3060 12 GB de escritorio):
 El perfil A se ha medido en una GPU de escritorio (360 GB/s y 170 W). En la
 3060 Laptop 6 GB hay que repetirlo para dar HU-03 por cerrada.
 
+## Reparto entre dos GPUs (RF-06b)
+
+Con `-sm layer` (el modo por defecto), llama.cpp reparte las capas entre las
+GPUs, y la caché KV de cada capa vive en la GPU de esa capa. `-ts a/b` fija la
+proporción. Entre GPUs solo viajan las activaciones de cada token (unos KB), no
+la caché KV.
+
+Medición 2026-11-09 en `warmachine`: 7B Q4_K_M, K f16 / V turbo3,
+`llama-bench -fa 1 -p 0 -n 64 -d 4096,64000`. Enlaces PCIe: **GPU0 en Gen3 x1
+(~1 GB/s)** y GPU1 en Gen4 x16 (~31.5 GB/s).
+
+| Reparto | tok/s @4K | tok/s @64K |
+|---|---:|---:|
+| Solo GPU0 (`-sm none -mg 0`) | 57.6 | 22.4 |
+| Solo GPU1 (`-sm none -mg 1`) | 59.5 | 22.0 |
+| `-ts 70/30` | 60.8 | 23.4 |
+| `-ts 60/40` | 60.8 | **23.6** |
+| `-ts 50/50` | 60.7 | 23.5 |
+| `-ts 40/60` | 60.4 | 22.7 |
+| `-ts 30/70` | 59.7 | 21.5 |
+| `-ts 50/50 -nkvo 1` (KV en RAM) | 7.4 | **0.6** |
+
+Prefill de 4096 tokens: 2175 tok/s solo en GPU0, 2263 solo en GPU1 y 3054 con
+`-ts 60/40`. Carga del modelo (caché de disco caliente): 7.4 s en GPU0
+(x1) frente a 1.8 s en GPU1 (x16).
+
+Conclusiones:
+
+- Entre 70/30 y 50/50 la generación varía menos de un 1%. El reparto por
+  defecto (según la VRAM libre) cae en ese rango, así que `forge doctor` no
+  fija `-ts`.
+- Incluso con GPU0 en x1, el reparto por capas da 23.5 tok/s a 64K. El enlace
+  estrecho solo frena la carga del modelo (4x más lenta), y `forge doctor`
+  avisa de ello.
+- Sacar la caché KV a la RAM (`-nkvo`), que es el fallback que el SDD propone
+  para enlaces x4, hunde la generación a 0.6 tok/s. Ver la pregunta abierta en
+  `docs/HANDOFF.md`.
+- La segunda GPU sirve sobre todo para el prefill (+35–40%). Con una sola
+  GPU de 12 GB, el 7B a 64K sigue dando unos 22 tok/s (relevante para RNF-15).
+
 ## Verificación
 
 ```powershell
