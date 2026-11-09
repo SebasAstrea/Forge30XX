@@ -16,7 +16,8 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   ~2.1 GB de KV; KL-divergence 0.0040 frente a f16/f16.
 - `@sveltejs/vite-plugin-svelte` 3 → 4 (ADR-0007): soporte oficial de Svelte 5.
 - LLM-juez: Qwen2.5-72B sustituido por un modelo gratuito de opencode
-  (ADR-0009).
+  (ADR-0009). Puntuación absoluta con el código y 25 tareas por perfil
+  (ADR-0010); AGENTS.md 11.5 pasa de 50 a 25 prompts.
 
 ### Added
 

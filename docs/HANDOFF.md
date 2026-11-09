@@ -59,26 +59,22 @@
 | 3 | `@sveltejs/vite-plugin-svelte` 3 → 4 | 0007 | `frontend/package.json` |
 | 4 | Retirar `tonic` | 0008 | `Cargo.toml`, SDD §8 |
 | 5 | LLM-juez con opencode y modelo gratuito | 0009 | `python -m forge_ml.judge`, SDD §10 |
+| 6 | Juez: puntuación absoluta, 25 tareas por perfil | 0010 | `forge_ml.judge`, AGENTS.md 11.5 |
 
-### Pendiente del PO: método del LLM-juez (ADR-0009)
+### LLM-juez (ADR-0009, ADR-0010)
 
-La primera ejecución (perfil A, turbo2 frente a f16/f16) quedó a 44 de 50
-veredictos, con media 3.32:
-- **Cuota:** la gratuita de opencode se agota en unas 45 llamadas al día y es
-  compartida entre todos los modelos gratuitos.
-- **Método:** comparar con la respuesta f16 mide parecido, no calidad. Con
-  temperatura 0 ninguna respuesta coincidió con la de referencia, y los "2/5"
-  revisados eran respuestas válidas pero distintas.
-
-Respuestas ya generadas (reutilizables) en
-`~/Descargas/kl-work/judge/{a,b}-{ref,cand}.jsonl` de `warmachine`.
-Veredictos de A en `a-verdicts.jsonl`, que `score --cache` reanuda.
+Método aprobado: puntuación absoluta con el código, ≥4/5 en 25 tareas por
+perfil. En `warmachine`, `~/Descargas/kl-work/judge25.sh` genera las
+respuestas (candidatas y f16/f16 de control) y reintenta la puntuación cada
+30 min hasta que se renueve la cuota gratuita de opencode (~45 llamadas al
+día). Resultados: `~/Descargas/kl-work/judge25/{a,b}-report.json`. Hay que
+copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
 
 ## Backlog inmediato (orden del SDD §6)
 
 - [ ] **S2 — KV Perfil A**: test de aceptación `tests/hu03_full_context.rs`
       en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
-      ejecutarlo en una 3060 Laptop 6 GB y cerrar el LLM-juez (ADR-0009).
+      ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez (ADR-0010).
       RF-05 y RF-06 cumplen el criterio de VRAM.
 - [ ] **S3 — KV Perfil B + dual GPU**: RF-06b (reparto KV midiendo PCIe),
       HU-00b, HU-03b. Volver a medir f16/turbo3 tras el reparto (margen
