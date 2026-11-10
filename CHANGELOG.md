@@ -9,6 +9,8 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Changed (decisiones del PO 2026-11-09)
 
+- QLoRA solo en el perfil A (ADR-0014); HU-02 retirada: el perfil B usa
+  Qwen3.6-35B-A3B sin LoRA.
 - Modelos base (ADR-0013): perfil A Qwen3.5-4B y perfil B Qwen3.6-35B-A3B
   (MoE, Apache-2.0). `forge doctor` recomienda para B `--n-cpu-moe 2
   --reasoning off`; medido 34.8 tok/s a 64K y RF-08 al 100% sin LoRA.

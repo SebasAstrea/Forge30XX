@@ -63,6 +63,7 @@
 | 7 | PCIe ≤x4: reparto por capas, sin KV en RAM | 0011 | SDD, `forge doctor` |
 | 8 | Dataset QLoRA: Glaive v2 + sintético | 0012 | `forge_ml.dataset` |
 | 9 | Modelos: Qwen3.5-4B (A), Qwen3.6-35B-A3B (B) | 0013 | SDD, `forge doctor` |
+| 10 | QLoRA solo en el perfil A | 0014 | SDD (RF-03, RF-04, HU-02, S5) |
 
 ### LLM-juez (ADR-0009, ADR-0010)
 
@@ -104,15 +105,21 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
 - [x] **Cambio de modelos (ADR-0013)**: perfil B = Qwen3.6-35B-A3B UD-Q4_K_M
       (34.8 tok/s a 64K, RF-08 100% sin LoRA); perfil A = Qwen3.5-4B
       (Apache-2.0). Resuelve la licencia `qwen-research` del 3B.
-  - [ ] Medir Qwen3.5-4B en A (KV, VRAM, tok/s, RF-08): falta el GGUF.
-  - [ ] **Decisión PO**: RF-03 tras el cambio. ¿QLoRA de Qwen3.5-4B en A?
-        ¿El 35B-A3B necesita LoRA si ya da 100% en RF-08? RF-04 con el 7B
-        queda sin objeto si B ya no usa el 7B.
-- [ ] **S6 — tool-calling**: RF-09..RF-11, RF-23. RF-10 necesita tree-sitter
-      (dependencia nueva → ADR + PO).
-- [ ] **S7 — RAG en orquestador**: cablear `rag::RagClient`/`RouterPolicy` a
-      `forge chat`.
-- [ ] **S8..S13**: según SDD §6.
+  - [ ] **Siguiente paso (punto 1)**: descargar el GGUF de Qwen3.5-4B y
+        medir el perfil A. Archivo sugerido: `unsloth/Qwen3.5-4B-GGUF`,
+        `Qwen3.5-4B-Q4_K_M.gguf` (2.55 GiB) en `models/` (ruta ya puesta en
+        `forge.config.toml`). Medir con `CUDA_VISIBLE_DEVICES=0`:
+        - KV y VRAM a 32K con turbo2 (`llama-server -lv 4`, línea
+          `llama_kv_cache: size`).
+        - `tests/hu03_full_context.rs` (≥12 tok/s, ≤5837 MiB).
+        - `tests/rf08_tool_calls.rs` (≥90%). Si es un modelo con thinking,
+          probar `--reasoning off` como en el 35B-A3B.
+        Conexión del PO muy lenta el 2026-11-09: la descarga la hace él.
+  - [x] **RF-03 tras el cambio (ADR-0014)**: QLoRA solo en A con Qwen3.5-4B;
+        B usa Qwen3.6-35B-A3B sin LoRA. HU-02 retirada.
+  - [ ] Reentrenar A con Qwen3.5-4B: poner en `[training.A]` su versión
+        bnb-4bit con revisión fijada, `make train-lora PROFILE=A`, RF-08 y
+        RF-04 sobre pesos de 16 bits.
 
 ## Otras notas
 

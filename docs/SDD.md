@@ -97,9 +97,9 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 ### 3.2 Modelo y especialización
 - RF-01 | Cargar Qwen3.5-4B (A) o Qwen3.6-35B-A3B (B) GGUF Q4_K_M/Q5_K_M (ADR-0013) | Must | * | A: <30 s; B: <60 s.
 - RF-02 | Aplicar LoRA sin recargar base | Must | * | Hot-swap <3 s; 10 prompts verificables.
-- RF-03 | Pipeline QLoRA reproducible para tool-calling | Must | * | `make train-lora PROFILE=A` <4 h en 6 GB; B <6 h en 2x3060.
-- RF-03b | Unsloth + QLoRA 4-bit + gradient_checkpointing + paged_adamw_8bit | Must | A | 3B batch efectivo 8 sin OOM en 6 GB.
-- RF-04 | Merge LoRA + export GGUF | Should | * | ±2% equivalente a adaptador separado.
+- RF-03 | Pipeline QLoRA reproducible para tool-calling | Must | A | `make train-lora PROFILE=A` <4 h en 6 GB. El perfil B usa Qwen3.6-35B-A3B sin LoRA (ADR-0014).
+- RF-03b | Unsloth + QLoRA 4-bit + gradient_checkpointing + paged_adamw_8bit | Must | A | Qwen3.5-4B batch efectivo 8 sin OOM en 6 GB.
+- RF-04 | Merge LoRA + export GGUF | Should | A | ±2% equivalente a adaptador separado.
 
 ### 3.3 Inferencia y contexto
 - RF-05 | Integrar llama-cpp-turboquant; turbo2 (A) / turbo3 (B) | Must | * | A: 32K → <1.5 GB KV. B: 64K → <3 GB KV.
@@ -165,8 +165,8 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 
 - HU-00 | 3060 Laptop 6 GB: `forge doctor` recomienda config sin investigar | RF-00, RF-21b | A: perfil, Qwen3.5-4B Q4, 32K, KV turbo2, aviso TGP<100W. B: Qwen3.6-35B-A3B Q4, 64K, KV f16/turbo3, reparto medido | 5 pts
 - HU-00b | 2x3060: reparto automático entre GPUs | Modelo y su KV repartidos por capas entre GPUs; mide PCIe; si ≤x4, avisa (ADR-0011) | 8 pts
-- HU-01 | 3060 6 GB: entrenar LoRA 3B sin OOM | `make train-lora PROFILE=A` sin OOM batch 8; manifest completo; ≥90% tool-calls válidas | 13 pts
-- HU-02 | 2x3060: entrenar 7B usando ambas | device_map=auto <6 h; ≥95% válidas | 8 pts
+- HU-01 | 3060 6 GB: entrenar LoRA Qwen3.5-4B sin OOM | `make train-lora PROFILE=A` sin OOM batch 8; manifest completo; ≥90% tool-calls válidas | 13 pts
+- HU-02 | ~~2x3060: entrenar 7B usando ambas~~ Retirada (ADR-0014): Qwen3.6-35B-A3B da 100% en RF-08 sin LoRA | — | 0 pts
 - HU-03 | 3060 6 GB: 32K contexto sin agotar VRAM | ≤5.7 GB; ≥12 tok/s lleno | 8 pts
 - HU-03b | 2x3060: 64K usando ambas | ≤11.4 GB/GPU; ≥22 tok/s | 8 pts
 - HU-03c | Reducción automática de contexto antes de fallar | Al 90% VRAM reduce ventana/turbo; sigue respondiendo; registra en UI | 5 pts
@@ -189,8 +189,8 @@ Formato: ID | Requisito | Prioridad | Perfiles | Criterio aceptación.
 | S1 | Inferencia mínima | RF-01, RF-07, RF-08, streaming de tokens de RF-18 (ADR-0003) | Chat 3B (A)/7B (B) vía API OpenAI con streaming |
 | S2 | KV Perfil A | RF-05 turbo2, RF-06 (ADR-0005), HU-03 | 32K en <1.5 GB KV en 3060 6 GB |
 | S3 | KV Perfil B + dual | RF-05 turbo3, RF-06, RF-06b, HU-00b, HU-03b | 64K repartido en 2x3060 |
-| S4 | QLoRA A | RF-03, RF-03b, HU-01 | LoRA 3B <4 h en 6 GB |
-| S5 | QLoRA B + merge | RF-03 B, RF-04, HU-02 | LoRA 7B en 2x3060 + merge GGUF |
+| S4 | QLoRA A | RF-03, RF-03b, HU-01 | LoRA Qwen3.5-4B <4 h en 6 GB |
+| S5 | Merge (ADR-0014) | RF-04 (A) | Merge del LoRA de Qwen3.5-4B + export GGUF |
 | S6 | Tool-calling base | RF-09, RF-10, RF-11, RF-23 | Edición real con diff validado |
 | S7 | RAG | RF-14, RF-15 | Decide RAG vs lectura (umbral por perfil) |
 | S8 | Web + shell | RF-12, RF-13 | Búsqueda docs + shell sandbox |
@@ -235,7 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
-- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético), 0013 (modelos: Qwen3.5-4B en A, Qwen3.6-35B-A3B en B).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético), 0013 (modelos: Qwen3.5-4B en A, Qwen3.6-35B-A3B en B), 0014 (QLoRA solo en el perfil A).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 
