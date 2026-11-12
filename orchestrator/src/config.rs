@@ -101,6 +101,33 @@ impl Config {
     }
 }
 
+/// Config mínima para tests de otros módulos (servidor, etc.).
+#[cfg(test)]
+pub fn test_config() -> Config {
+    Config {
+        hardware: Hardware {
+            profile: "A".to_string(),
+            gpu_index: 0,
+        },
+        ui: Ui { port: 7860 },
+        context_router: ContextRouter {
+            rag_threshold_tokens: 1500,
+            summarize_at_percent: 70,
+        },
+        rag: Rag {
+            base_url: "http://localhost:8765".to_string(),
+            timeout_ms: 5_000,
+        },
+        inference: Inference {
+            base_url: "http://127.0.0.1:8080".to_string(),
+            temperature: 0.2,
+            top_p: 0.95,
+            max_tokens: 4096,
+            timeout_ms: 120_000,
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

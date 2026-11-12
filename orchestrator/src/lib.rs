@@ -9,6 +9,7 @@ pub mod config;
 pub mod hardware;
 pub mod inference;
 pub mod rag;
+pub mod server;
 pub mod tool_call;
 
 #[cfg(test)]

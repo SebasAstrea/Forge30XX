@@ -1,9 +1,22 @@
 <script lang="ts">
-  // UI mínima de bootstrap. Chat, visor y panel de tool-calls: Sprint S9/S10.
-  const title = "Forge30XX";
+  // UI local de Forge30XX (S9, RF-18/RF-20). El chat y el panel de tool-calls
+  // viven en componentes de $lib para respetar el límite de 150 líneas/comp.
+  import Chat from "$lib/Chat.svelte";
 </script>
 
 <main>
-  <h1>{title}</h1>
-  <p>UI local — esqueleto de bootstrap. Chat y paneles pendientes (S9/S10).</p>
+  <h1>Forge30XX</h1>
+  <Chat />
 </main>
+
+<style>
+  main {
+    max-width: 48rem;
+    margin: 0 auto;
+    padding: 1rem;
+    font-family: system-ui, sans-serif;
+  }
+  h1 {
+    font-size: 1.4rem;
+  }
+</style>

@@ -17,7 +17,11 @@ path = "src/lib.rs"
 [dependencies]
 # Stack fijado en docs/SDD.md sección 8.
 axum = "0.7"
+# Estáticos de la UI SvelteKit y utilidades HTTP (ADR-0015, S9).
+tower-http = { version = "0.6", features = ["fs"] }
 tokio = { version = "1.40", features = ["full"] }
+# Adaptador Stream para los canales de tokio en el streaming SSE (ADR-0015).
+tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
@@ -36,6 +40,9 @@ reqwest = { version = "0.12", default-features = false, features = ["json"] }
 [dev-dependencies]
 proptest = "1"
 figment = { version = "0.10", features = ["toml", "env", "test"] }
+# Conducir el router de Axum en tests sin abrir un socket (ADR-0015, S9).
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
 
 [profile.release]
 lto = true

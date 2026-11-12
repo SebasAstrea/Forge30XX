@@ -52,7 +52,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Command::Doctor => cmd_doctor(&cli.config),
-        Command::Run { ui } => cmd_run(ui),
+        Command::Run { ui } => cmd_run(&cli.config, ui),
         Command::Chat => cmd_chat(&cli.config),
         Command::Profile { which } => cmd_profile(&which),
         Command::Version => {
@@ -110,8 +110,18 @@ fn print_recommendation(rec: &Recommendation) {
     }
 }
 
-fn cmd_run(_ui: bool) -> Result<()> {
-    tracing::warn!("run: pendiente Sprint S9 (RF-18 UI web)");
+fn cmd_run(config_path: &str, ui: bool) -> Result<()> {
+    if !ui {
+        println!("Nada que hacer sin --ui (el agente headless llega en otro sprint).");
+        return Ok(());
+    }
+    let cfg = Config::load(config_path)?;
+    // Estáticos de SvelteKit; configurable por si se sirve desde otra ruta.
+    let static_dir = std::env::var("FORGE_UI_STATIC_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("frontend/build"));
+    let runtime = tokio::runtime::Runtime::new()?;
+    runtime.block_on(forge::server::serve(&cfg, static_dir))?;
     Ok(())
 }
 

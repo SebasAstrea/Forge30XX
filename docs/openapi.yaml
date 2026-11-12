@@ -1,0 +1,181 @@
+openapi: 3.1.0
+info:
+  title: Forge30XX UI API
+  version: 0.1.0
+  description: >
+    API local del orquestador para la UI web (S9, RF-18/RF-20). Servida por
+    `forge run --ui` en el puerto de `[ui].port` (7860 por defecto). Contrato
+    fijado en ADR-0015. El streaming de tokens usa SSE (text/event-stream).
+servers:
+  - url: http://127.0.0.1:7860
+    description: Orquestador local (puerto configurable en forge.config.toml)
+
+paths:
+  /api/health:
+    get:
+      summary: Estado del llama-server
+      description: Indicador de conexión para la UI (AGENTS.md 11.3).
+      operationId: getHealth
+      responses:
+        "200":
+          description: Estado del backend de inferencia
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+
+  /api/chat:
+    post:
+      summary: Turno de chat con streaming (RF-18)
+      description: >
+        Envía el historial y recibe un stream SSE. Los eventos se nombran con el
+        campo `event:`; `data:` es un objeto JSON. Secuencia típica: varios
+        `token`, cero o más pares `tool_request`/`tool_result`, y un `done`
+        final. Un `error` puede terminar el turno.
+      operationId: postChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Stream de eventos SSE
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                turno:
+                  summary: Un turno con un tool-call destructivo
+                  value: |
+                    event: token
+                    data: {"text":"Voy a "}
+
+                    event: token
+                    data: {"text":"borrar el archivo."}
+
+                    event: tool_request
+                    data: {"id":"t1","name":"delete_file","arguments":{"path":"tmp/out.log"},"destructive":true}
+
+                    event: tool_result
+                    data: {"id":"t1","status":"rejected"}
+
+                    event: done
+                    data: {}
+
+  /api/tools/{id}/decision:
+    post:
+      summary: Aprobar o rechazar un tool-call destructivo (RF-20)
+      description: >
+        Resuelve un `tool_request` pendiente emitido en el stream. Sin
+        aprobación no se ejecuta (RF-20). La ejecución efectiva es S6; en S9 el
+        resultado tras aprobar es un stub.
+      operationId: postToolDecision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Identificador del tool_request emitido en el stream.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolDecision"
+      responses:
+        "200":
+          description: Decisión registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolResult"
+        "404":
+          description: No hay un tool_request pendiente con ese id
+
+components:
+  schemas:
+    Role:
+      type: string
+      enum: [system, user, assistant]
+
+    Message:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+        content:
+          type: string
+
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+
+    Health:
+      type: object
+      required: [llama_server]
+      properties:
+        llama_server:
+          type: boolean
+          description: true si el llama-server responde 2xx a /v1/models.
+
+    ToolDecision:
+      type: object
+      required: [decision]
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject]
+
+    ToolResult:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [approved, rejected, executed]
+
+    # Esquemas de los eventos SSE (campo `data:` de cada `event:`). Documentados
+    # para el contrato; el transporte real es text/event-stream, no JSON plano.
+    TokenEvent:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+
+    ToolRequestEvent:
+      type: object
+      required: [id, name, arguments, destructive]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: "Nombre de la tool: [a-z][a-z0-9_]{0,63}."
+        arguments:
+          type: object
+          additionalProperties: true
+        destructive:
+          type: boolean
+          description: >
+            true salvo que la tool esté en la lista blanca de solo-lectura
+            (fail-safe, ADR-0015). Las destructivas requieren aprobación (RF-20).
+
+    ErrorEvent:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string

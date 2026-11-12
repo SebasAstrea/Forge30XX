@@ -1,6 +1,6 @@
 # Handoff — estado del proyecto para otros agentes/sesiones
 
-Última actualización: 2026-11-09. Ver `git log` para el commit cabeza.
+Última actualización: 2026-11-12. Ver `git log` para el commit cabeza.
 
 > Lectura obligatoria antes de tocar código: `docs/SDD.md`, `AGENTS.md`,
 > `docs/adr/`, luego este archivo. PO: **Sebastia M.** (decisiones críticas,
@@ -26,6 +26,36 @@
 |---|---|---|---|---|
 | Original | Windows, Rust GNU + MinGW | RTX 3050 6 GB Laptop | A | Sin MSVC: el fork no compila con CUDA ahí |
 | `warmachine` | Fedora 44 | 2x RTX 3060 12 GB | B (A+ con 1 GPU) | CUDA 13.3, GCC 16; fork en `~/Descargas/llama-cpp-turboquant` |
+
+> **Dos SO en el desarrollo.** El proyecto se desarrolla y prueba en dos
+> equipos con sistemas operativos distintos: Windows (equipo Original, Perfil A)
+> y Fedora 44 (`warmachine`, Perfil B). El acceso es mutuamente excluyente: se
+> trabaja en uno u otro, no en ambos a la vez. **El software como tal debe
+> correr en ambos sistemas operativos.** Cada equipo valida lo que corresponde
+> a su SO/perfil; un fallo que sea específico del otro SO (p. ej. el fork CUDA
+> que no compila en Windows por falta de MSVC) no cuenta como fallo en el equipo
+> actual **siempre que el software corra en el SO de ese equipo**. Lo que es
+> ruido puramente local del checkout (no del código) tampoco cuenta: ver la
+> nota de CRLF más abajo.
+
+### Verificación por equipo
+
+- **Windows / RTX 3050 6 GB / Perfil A — verde (2026-11-12).** Ejecutada la
+  verificación sin GPU equivalente a `make check` por capas (`make` y el fork
+  CUDA no están disponibles en este equipo): Rust `fmt`+`clippy`+`test` (62
+  tests), Python `ruff`+`mypy --strict`+`pytest` (49 tests, cobertura 96.7%),
+  frontend `eslint`+`svelte-check`+`vitest`, y `check-sizes`. Todo en verde.
+  - `prettier --check` falla en `frontend/eslint.config.js` y
+    `frontend/package.json` por finales de línea **CRLF**. En el índice de git
+    ambos están en **LF** (`git ls-files --eol`); es ruido del checkout en
+    Windows, no del código, por eso el CI de Linux pasa. No se corrige
+    reescribiendo los archivos (volverían a CRLF por `core.autocrlf`); la
+    solución correcta sería un `.gitattributes` con `eol=lf`, pendiente de
+    decidir con el PO.
+  - No ejecutable aquí (territorio de Fedora/Perfil B): cobertura con
+    `cargo-llvm-cov`, compilación del fork CUDA, `make bench`/`llama-bench`,
+    `make test-b`, y los tests `hu03_full_context` / `rf08_tool_calls` (salen
+    `ignored` sin `FORGE_TEST_LLAMA_URL`).
 
 ## Hecho (verificado)
 
@@ -76,6 +106,20 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
 
 ## Backlog inmediato (orden del SDD §6)
 
+- [~] **S9 — UI parte 1 (RF-18, RF-20, ADR-0015)**: contrato UI↔backend fijado
+      con el PO (2026-11-12). Hecho y verificado en Windows (sin GPU):
+  - [x] Servidor HTTP Axum en el orquestador (`src/server*`), `forge run --ui`
+        sirve estáticos de SvelteKit y expone `/api/chat` (SSE), `/api/health` y
+        `/api/tools/{id}/decision` (RF-20). `docs/openapi.yaml` creado.
+  - [x] Clasificación destructiva fail-safe en `tool_call::is_destructive`
+        (lista blanca de solo-lectura).
+  - [x] Frontend SvelteKit: `Chat.svelte` (streaming + estado de conexión con
+        backoff), `ToolPanel.svelte` (aprobación RF-20), cliente `lib/api.ts`.
+  - [x] Tests: integración `tests/ui_server.rs` (health, SSE, aprobación) con
+        llama-server mockeado; unit del parser SSE (vitest). `cargo test`,
+        clippy, svelte-check, eslint, vitest y prettier en verde.
+  - [ ] Pendiente: ejecución real de tools tras aprobar es stub (S6); demo
+        end-to-end contra un llama-server real (equipo con GPU).
 - [ ] **S2 — KV Perfil A**: test de aceptación `tests/hu03_full_context.rs`
       en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
       ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez (ADR-0010).

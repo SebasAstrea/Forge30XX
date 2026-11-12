@@ -26,7 +26,7 @@ pub enum InferenceError {
 }
 
 /// Rol de un mensaje en el chat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     /// Mensaje de sistema.
@@ -38,7 +38,7 @@ pub enum Role {
 }
 
 /// Un mensaje del chat.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
     /// Rol del emisor.
     pub role: Role,

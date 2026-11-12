@@ -37,7 +37,20 @@ impl ToolCall {
         }
         Ok(call)
     }
+
+    /// `true` si la tool requiere aprobación del usuario (RF-20, ADR-0015).
+    ///
+    /// Lista blanca *fail-safe*: solo las tools explícitamente de solo-lectura
+    /// son no destructivas; cualquier otra (incluida una desconocida) se trata
+    /// como destructiva y no se ejecuta sin aprobación.
+    pub fn is_destructive(&self) -> bool {
+        !READ_ONLY_TOOLS.contains(&self.name.as_str())
+    }
 }
+
+/// Tools de solo-lectura que no requieren aprobación (ADR-0015). Toda tool
+/// fuera de esta lista es destructiva por defecto.
+const READ_ONLY_TOOLS: &[&str] = &["read_file", "ls", "grep", "find", "search", "web_search"];
 
 fn is_valid_name(name: &str) -> bool {
     let mut chars = name.chars();
@@ -93,6 +106,26 @@ mod tests {
                 matches!(ToolCall::parse(&raw), Err(ToolCallError::InvalidName(_))),
                 "debería rechazar {bad:?}"
             );
+        }
+    }
+
+    #[test]
+    fn read_only_tools_are_not_destructive() {
+        for name in ["read_file", "ls", "grep", "find", "search", "web_search"] {
+            let raw = format!("{{\"name\":\"{name}\",\"arguments\":{{}}}}");
+            let call = ToolCall::parse(&raw).expect("valid");
+            assert!(!call.is_destructive(), "{name} no debería ser destructiva");
+        }
+    }
+
+    #[test]
+    fn write_and_unknown_tools_are_destructive() {
+        // Tools de escritura conocidas y una desconocida: todas destructivas
+        // (lista blanca fail-safe, ADR-0015).
+        for name in ["delete_file", "edit", "shell", "write_file", "tool_nueva"] {
+            let raw = format!("{{\"name\":\"{name}\",\"arguments\":{{}}}}");
+            let call = ToolCall::parse(&raw).expect("valid");
+            assert!(call.is_destructive(), "{name} debería ser destructiva");
         }
     }
 }
