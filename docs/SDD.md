@@ -235,7 +235,7 @@ RTX 30xx (A: 1 GPU 6 GB; B: 2 GPU 12 GB c/u)
 - ADR-08: Guardarraíles 2 capas: Rust determinista + Python semántico.
 - ADR-09: Perfil B usa layer/pipeline split u offload asimétrico, no TP puro (PCIe sin NVLink).
 - ADR-10: DegradationManager centraliza decisiones de recorte (contexto, quant KV, offload).
-- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético), 0013 (modelos: Qwen3.5-4B en A, Qwen3.6-35B-A3B en B), 0014 (QLoRA solo en el perfil A).
+- Decisiones posteriores en `adr/`: 0005 (RF-06 sin ventana KV), 0006 (KV del perfil B), 0007 (vite-plugin-svelte 4), 0008 (retirar tonic), 0009 (LLM-juez vía opencode), 0010 (método del juez: absoluto, 25 tareas), 0011 (PCIe ≤x4 sin KV en RAM), 0012 (dataset QLoRA: Glaive v2 + sintético), 0013 (modelos: Qwen3.5-4B en A, Qwen3.6-35B-A3B en B), 0014 (QLoRA solo en el perfil A), 0015 (contrato UI↔backend del S9: SSE, endpoints y aprobación de tool-calls).
 
 Cualquier ADR nueva o modificación de las existentes requiere aprobación del PO (ver sección 0).
 

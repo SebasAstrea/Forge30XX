@@ -77,6 +77,12 @@
     ADR-0004.
 - [x] **RF-05 medido** (S2/S3) con el fork en Linux: KV de A (32K) y B (64K)
       dentro del KPI con turbo2/turbo3. Tablas en `docs/inference.md`.
+- [x] **S9 — UI parte 1 (RF-18/RF-20, ADR-0015)**: `forge run --ui` sirve
+      SvelteKit y expone `/api/chat` (SSE), `/api/health` y
+      `/api/tools/{id}/decision`; contrato en `docs/openapi.yaml`. Demo
+      end-to-end verificada en `warmachine` contra llama-server real
+      (Qwen3.5-4B, `/api/health` OK, tokens SSE y `/` 200). Falta pulir la UI
+      (S10: panel VRAM, CLI).
 - [x] **RF-08 repetido** con Q4_K_M: 3B 97% (A, umbral 90%), 7B en 2 GPUs
       100% (B, umbral 95%).
 
@@ -170,7 +176,8 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
 - `ci-hardware.yml` (nightly) se queda en cola 24 h y se cancela: no hay
   runners self-hosted. `warmachine` podría registrarse como runner
   `[self-hosted, gpu, rtx3060-dual]`.
-- `frontend/` sigue siendo un esqueleto (S9).
+- `frontend/` cubre S9 (chat, streaming y panel de aprobación); el panel de
+  VRAM y la CLI son S10.
 - CI de GitHub en verde desde el commit `fix(build): restaurar yaml…`
   (2026-11-09). Generar `package-lock.json` con `npx npm@10` (la versión del
   CI): npm 11 elimina entradas que npm 10 exige.

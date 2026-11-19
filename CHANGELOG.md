@@ -28,6 +28,10 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- UI web parte 1 (S9, RF-18/RF-20, ADR-0015): `forge run --ui` levanta Axum en
+  el puerto `[ui]`, sirve el build de SvelteKit y expone `/api/chat` (SSE de
+  tokens), `/api/health` y `/api/tools/{id}/decision`; contrato en
+  `docs/openapi.yaml`, frontend con reconexión y estado de conexión.
 - QLoRA del perfil B (HU-02): 7B en dos GPUs en 2 h 20 min; RF-08 sin gramática
   pasa del 20% al 97% con el adaptador. RF-04: la fusión en f16 coincide con el
   adaptador separado, y el export a Q4_K_M requiere los pesos de 16 bits
