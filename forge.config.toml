@@ -52,8 +52,9 @@ seed = 42
 
 [training.A]
 # RF-03b: Unsloth + QLoRA 4-bit + gradient checkpointing + paged_adamw_8bit, batch efectivo 8.
-base_model = "unsloth/Qwen2.5-Coder-3B-Instruct-bnb-4bit"
-revision = "84f4805873850233fe5b2b156d3e3435425b4098"
+# ADR-0013: el perfil A entrena sobre Qwen3.5-4B (Apache-2.0).
+base_model = "unsloth/Qwen3.5-4B"
+revision = "3764fa359b9082ea5a1e4a5e3ac3aaf6e9671636"
 max_seq_len = 2048
 batch_size = 2
 grad_accum = 4

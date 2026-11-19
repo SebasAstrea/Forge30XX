@@ -42,7 +42,7 @@ RF-08 nunca entran en el entrenamiento (`test_dataset.py` lo comprueba).
 ## Entrenar
 
 ```bash
-make train-lora PROFILE=A        # perfil A: 3B, una GPU
+make train-lora PROFILE=A        # perfil A: Qwen3.5-4B, una GPU
 make train-lora PROFILE=B        # perfil B: 7B, device_map="auto" entre las dos GPUs
 # Prueba corta del pipeline:
 cd python && .venv-ml/bin/python -m forge_ml.train --profile A --max-steps 60
@@ -59,7 +59,40 @@ dataset y las métricas, incluido el pico de VRAM (RNF-09).
 
 ## Resultados
 
-Prueba de 60 pasos, perfil A, 2026-11-09, una RTX 3060 12 GB de escritorio:
+### Perfil A (Qwen3.5-4B)
+
+Prueba corta, perfil A, 2026-11-19, una RTX 3060 12 GB de escritorio:
+
+| Métrica | Valor |
+|---|---:|
+| Pasos | 60 |
+| Pérdida de entrenamiento | 0.067 |
+| Pérdida de evaluación (450 ejemplos) | 0.045 |
+| Tiempo | 237 s |
+| Pico de VRAM | 4110 MiB |
+
+Época completa, perfil A (`artifacts/lora/A-20261119T230149Z`):
+
+| Métrica | Valor |
+|---|---:|
+| Pasos | 1069 (batch efectivo 8) |
+| Pérdida de entrenamiento / evaluación | 0.036 / 0.025 |
+| Tiempo | 43 min 9 s (límite RF-03: 4 h) |
+| Pico de VRAM | 4130 MiB |
+
+RF-08 con el adaptador sobre el GGUF base Q4_K_M (30 prompts, 32K, turbo2):
+
+| | Sin gramática | Con gramática |
+|---|---:|---:|
+| Qwen3.5-4B Q4_K_M, sin adaptador | 57% | 100% |
+| Qwen3.5-4B Q4_K_M + adaptador A | **100%** | **100%** |
+
+HU-01 pide ≥90% de tool-calls válidos: se cumple incluso sin gramática.
+
+### Perfil A histórico (Qwen2.5-Coder-3B)
+
+Medido antes de ADR-0013 (2026-11-09), una RTX 3060 12 GB de escritorio.
+Prueba de 60 pasos:
 
 | Métrica | Valor |
 |---|---:|
@@ -72,7 +105,7 @@ Con ese ritmo, una época completa (1069 pasos) tarda unos 33 min, lejos del
 límite de 4 h de RF-03. El pico de 2.5 GB cabe en 6 GB, pero hay que
 confirmarlo en la 3060 Laptop (HU-01).
 
-Época completa, perfil A (`artifacts/lora/A-20261109T172555Z`):
+Época completa, perfil A histórico (`artifacts/lora/A-20261109T172555Z`):
 
 | Métrica | Valor |
 |---|---:|
@@ -88,22 +121,17 @@ confirmarlo en la 3060 Laptop (HU-01).
 # modelo sin cuantizar: el script no admite bases bitsandbytes.
 cd llama-cpp-turboquant
 PYTHONPATH=gguf-py <venv-ml>/bin/python convert_lora_to_gguf.py \
-  --base-model-id Qwen/Qwen2.5-Coder-3B-Instruct --outtype f16 \
+  --base-model-id Qwen/Qwen3.5-4B --outtype f16 \
   --outfile <run>/adapter-f16.gguf <run>/adapter
 # Servir el modelo base Q4_K_M con el adaptador
-llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf --lora <run>/adapter-f16.gguf \
-  -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
+llama-server -m models/Qwen3.5-4B-Q4_K_M.gguf --lora <run>/adapter-f16.gguf \
+  -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --reasoning off --port 8080
 ```
 
 Test RF-08 (30 prompts que no están en el entrenamiento, system prompt
-distinto del de entrenamiento) en el mismo servidor, con y sin `--lora`:
-
-| | Sin gramática | Con gramática |
-|---|---:|---:|
-| 3B Q4_K_M, sin adaptador | 30% | 97% |
-| 3B Q4_K_M + adaptador A | **100%** | **100%** |
-
-HU-01 pide ≥90% de tool-calls válidos: se cumple incluso sin gramática.
+distinto del de entrenamiento) en el mismo servidor, con y sin `--lora`. Los
+resultados del perfil A con Qwen3.5-4B están en
+[Resultados](#perfil-a-qwen35-4b).
 
 Riesgo para S6: el adaptador solo ha visto respuestas que son tool-calls. El
 bucle del agente también necesita turnos de respuesta final en texto, que
@@ -136,18 +164,46 @@ HU-02 pide ≥95%: se cumple sin gramática.
 
 ## Fusión y exportación a GGUF (RF-04)
 
+Criterio de RF-04: ±2% frente al adaptador separado, medido con la
+perplejidad de `eval.jsonl` (450 filas renderizadas con la plantilla de chat,
+20 trozos de 4096 tokens). Las mediciones usan el ejecutable del fork
+(`llama-perplexity -f <eval-chat.txt> -c 4096 --chunks 20 -ngl 99 -fa on`).
+
+### Perfil A (Qwen3.5-4B)
+
+`convert_hf_to_gguf.py` del fork convierte la base de 16 bits a GGUF f16
+(8.65 GB, 441 tensores), y el adaptador se fusiona sobre ese f16 para
+cuantizar a Q4_K_M una sola vez:
+
 ```bash
-# Quitar las claves split.* que trae el GGUF del 7B: llama-export-lora las rechaza
+convert_hf_to_gguf.py <snapshot>/ --outtype f16 --outfile a-base-f16.gguf
+llama-export-lora -m a-base-f16.gguf --lora <run>/adapter-f16.gguf -o a-merged-f16.gguf
+llama-quantize a-merged-f16.gguf a-merged-q4_k_m.gguf Q4_K_M
+```
+
+| Modelo | PPL | Frente al adaptador |
+|---|---:|---:|
+| Base Q4_K_M sin adaptador | 1.1912 | +0.73% |
+| Base Q4_K_M + adaptador separado | 1.1825 | — |
+| Fusionado f16 (8.1 GiB) | 1.1794 | −0.26% ✅ |
+| Fusionado y recuantizado a Q4_K_M (2.6 GiB) | 1.1796 | −0.25% ✅ |
+
+El fusionado Q4_K_M también pasa RF-08: 100% sin gramática y 100% con
+gramática en los 30 prompts.
+
+### Perfil B (Qwen2.5-Coder-7B, histórico)
+
+El 7B se fusionó sobre su propio GGUF Q4_K_M (el export de 16 bits nunca se
+completó antes de ADR-0014), y `llama-export-lora` rechaza las claves split.*
+del GGUF:
+
+```bash
 PYTHONPATH=gguf-py python gguf-py/gguf/scripts/gguf_new_metadata.py --force \
   --remove-metadata split.no --remove-metadata split.count --remove-metadata split.tensors.count \
   models/qwen2.5-coder-7b-instruct-q4_k_m.gguf base-nosplit.gguf
 llama-export-lora -m base-nosplit.gguf --lora <run>/adapter-f16.gguf -o merged-f16.gguf
 llama-quantize --allow-requantize merged-f16.gguf merged-q4_k_m.gguf Q4_K_M
 ```
-
-Criterio de RF-04: ±2% frente al adaptador separado. Medido con la
-perplejidad de `eval.jsonl` (20 trozos de 4096 tokens, plantilla de chat de
-Qwen):
 
 | Modelo | PPL | Frente al adaptador |
 |---|---:|---:|
@@ -157,6 +213,6 @@ Qwen):
 | Fusionado y recuantizado a Q4_K_M (4.7 GB) | 1.2830 | **+3.2% ❌** |
 
 La fusión es correcta (f16 coincide con el adaptador), pero recuantizar un
-modelo que ya era Q4_K_M cuantiza dos veces y pierde un 3.2%. Para cumplir
-RF-04 hay que fusionar sobre los pesos de 16 bits del modelo base
-(`Qwen/Qwen2.5-Coder-7B-Instruct`, ~15 GB) y cuantizar a Q4_K_M una sola vez.
+modelo que ya era Q4_K_M cuantiza dos veces y pierde un 3.2%. HU-02 se retiró
+en ADR-0014, así que ese export no bloquea RF-04: el criterio se cumple con
+el perfil A.

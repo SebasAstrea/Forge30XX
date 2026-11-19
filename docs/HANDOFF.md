@@ -1,6 +1,6 @@
 # Handoff — estado del proyecto para otros agentes/sesiones
 
-Última actualización: 2026-11-12. Ver `git log` para el commit cabeza.
+Última actualización: 2026-11-19. Ver `git log` para el commit cabeza.
 
 > Lectura obligatoria antes de tocar código: `docs/SDD.md`, `AGENTS.md`,
 > `docs/adr/`, luego este archivo. PO: **Sebastia M.** (decisiones críticas,
@@ -84,7 +84,12 @@
       (Qwen3.5-4B, `/api/health` OK, tokens SSE y `/` 200). Falta pulir la UI
       (S10: panel VRAM, CLI).
 - [x] **RF-08 repetido** con Q4_K_M: 3B 97% (A, umbral 90%), 7B en 2 GPUs
-      100% (B, umbral 95%).
+      100% (B, umbral 95%). Perfil A con Qwen3.5-4B: 57% sin gramática y 100%
+      con gramática; con el LoRA A y con el fusionado, 100% en ambos modos.
+- [x] **QLoRA y RF-04 del perfil A con Qwen3.5-4B** (2026-11-19, `warmachine`):
+      época completa en 43 min 9 s con un pico de 4130 MiB; fusión sobre la
+      base f16 y una sola cuantización a Q4_K_M con PPL −0.25% frente al
+      adaptador. Detalle en `docs/training.md`.
 
 ## Decisiones del PO (2026-11-09)
 
@@ -124,12 +129,14 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
   - [x] Tests: integración `tests/ui_server.rs` (health, SSE, aprobación) con
         llama-server mockeado; unit del parser SSE (vitest). `cargo test`,
         clippy, svelte-check, eslint, vitest y prettier en verde.
-  - [ ] Pendiente: ejecución real de tools tras aprobar es stub (S6); demo
-        end-to-end contra un llama-server real (equipo con GPU).
-- [ ] **S2 — KV Perfil A**: test de aceptación `tests/hu03_full_context.rs`
-      en verde en una GPU de escritorio (50.6 tok/s, 2538 MiB a 32K). Falta:
-      ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez (ADR-0010).
-      RF-05 y RF-06 cumplen el criterio de VRAM.
+  - [x] Pendiente: demo end-to-end contra un llama-server real, verificada en
+        `warmachine` (2026-11-19): `/api/health` OK, SSE de tokens y `/` 200.
+        La ejecución real de tools tras aprobar sigue siendo stub (S6).
+- [~] **S2 — KV Perfil A**: HU-03 en verde en una GPU de escritorio con
+      Qwen3.5-4B (32 196 tok de prompt, 55.9 tok/s, 3708 MiB con el escritorio
+      a 32K; umbral ≥12 tok/s y ≤5837 MiB). KV turbo2: 161.5 MiB a 32K.
+      Falta: ejecutarlo en una 3060 Laptop 6 GB y las notas del LLM-juez
+      (ADR-0010). RF-05 y RF-06 cumplen el criterio de VRAM.
 - [x] **S3 — KV Perfil B + dual GPU**:
   - [x] RF-06b medido: reparto por capas entre 70/30 y 50/50 da 23.4–23.6
         tok/s a 64K (`docs/inference.md#reparto-entre-dos-gpus-rf-06b`).
@@ -137,39 +144,33 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
         flags del llama-server para el perfil. Con PCIe ≤x4 se mantiene el
         reparto por capas (ADR-0011).
   - [x] HU-03b: `tests/hu03_full_context.rs` en verde (23.7 tok/s a 64K).
-- [ ] **S4 — QLoRA A** (`docs/training.md`):
+- [~] **S4 — QLoRA A** (`docs/training.md`):
   - [x] Dataset Glaive v2 + sintético con manifest (ADR-0012):
         `make dataset GLAIVE=...` → `artifacts/dataset-v1`.
-  - [x] `make train-lora PROFILE=A`: época completa en 33.6 min, pico de
-        2490 MiB (RTX 3060 12 GB de escritorio).
-  - [x] HU-01: RF-08 con el adaptador 100% sin gramática (30% sin adaptador).
-  - [ ] Repetir en la 3060 Laptop 6 GB (tiempo <4 h y sin OOM).
-- [ ] **S5 — QLoRA B + merge** (`docs/training.md#perfil-b-hu-02`):
-  - [x] HU-02: 7B en dos GPUs, época en 2 h 20 min, pico de 4746 MiB por
-        GPU. RF-08 con el adaptador: 97% sin gramática (20% sin adaptador).
-  - [x] RF-04, fusión: `llama-export-lora` en f16 coincide con el adaptador
-        (PPL −0.1%).
-  - [ ] RF-04, export Q4_K_M: recuantizar el Q4_K_M fusionado pierde un 3.2%
-        (>2%). Hay que fusionar sobre los pesos de 16 bits de
-        `Qwen/Qwen2.5-Coder-7B-Instruct` (~15 GB, la descarga la hace el PO).
+  - [x] `make train-lora PROFILE=A` con Qwen3.5-4B: época completa en
+        43 min 9 s (1069 pasos), pico de 4130 MiB y eval_loss 0.0247
+        (`artifacts/lora/A-20261119T230149Z`, RTX 3060 12 GB de escritorio).
+  - [x] HU-01: RF-08 con el adaptador 100% sin gramática (57% sin adaptador).
+  - [ ] Repetir en la 3060 Laptop 6 GB (tiempo <4 h y sin OOM). El pico de
+        4130 MiB debería caber, pero no está verificado.
+- [x] **S5 — RF-04 del perfil A** (`docs/training.md#perfil-a-qwen35-4b`):
+  - [x] Base de 16 bits → GGUF f16 (`convert_hf_to_gguf.py`), fusión con
+        `llama-export-lora` (PPL 1.1794, −0.26% frente al adaptador).
+  - [x] `llama-quantize` a Q4_K_M una sola vez: PPL 1.1796 (−0.25%, criterio
+        ±2%) y RF-08 100% sin gramática sobre el GGUF fusionado.
+  - [x] HU-02 (perfil B) histórica: su export Q4_K_M no se repite porque
+        ADR-0014 retiró el LoRA de B; el criterio RF-04 se cumple en A.
 - [x] **Cambio de modelos (ADR-0013)**: perfil B = Qwen3.6-35B-A3B UD-Q4_K_M
       (34.8 tok/s a 64K, RF-08 100% sin LoRA); perfil A = Qwen3.5-4B
       (Apache-2.0). Resuelve la licencia `qwen-research` del 3B.
-  - [ ] **Siguiente paso (punto 1)**: descargar el GGUF de Qwen3.5-4B y
-        medir el perfil A. Archivo sugerido: `unsloth/Qwen3.5-4B-GGUF`,
-        `Qwen3.5-4B-Q4_K_M.gguf` (2.55 GiB) en `models/` (ruta ya puesta en
-        `forge.config.toml`). Medir con `CUDA_VISIBLE_DEVICES=0`:
-        - KV y VRAM a 32K con turbo2 (`llama-server -lv 4`, línea
-          `llama_kv_cache: size`).
-        - `tests/hu03_full_context.rs` (≥12 tok/s, ≤5837 MiB).
-        - `tests/rf08_tool_calls.rs` (≥90%). Si es un modelo con thinking,
-          probar `--reasoning off` como en el 35B-A3B.
-        Conexión del PO muy lenta el 2026-11-09: la descarga la hace él.
+  - [x] **Medición del perfil A (punto 1, hecho 2026-11-19)**: GGUF
+        `Qwen3.5-4B-Q4_K_M.gguf` hardlinked en `models/`. KV turbo2 de
+        161.5 MiB a 32K, HU-03 55.9 tok/s / 3708 MiB y RF-08 57% sin
+        gramática (100% con gramática). `--reasoning off` es obligatorio.
   - [x] **RF-03 tras el cambio (ADR-0014)**: QLoRA solo en A con Qwen3.5-4B;
         B usa Qwen3.6-35B-A3B sin LoRA. HU-02 retirada.
-  - [ ] Reentrenar A con Qwen3.5-4B: poner en `[training.A]` su versión
-        bnb-4bit con revisión fijada, `make train-lora PROFILE=A`, RF-08 y
-        RF-04 sobre pesos de 16 bits.
+  - [x] Reentrenar A con Qwen3.5-4B (2026-11-19): `[training.A]` apunta a
+        `unsloth/Qwen3.5-4B` con revisión fijada; RF-08 y RF-04 cerrados.
 
 ## Otras notas
 
@@ -188,7 +189,7 @@ copiar las notas a `docs/inference.md` y ADR-0006 cuando estén.
 make check                                   # fmt + lint + test + cobertura, 3 capas
 cd orchestrator && cargo run --release --bin forge -- doctor
 # Chat contra el fork (ver docs/inference.md para los flags por perfil)
-llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf -c 32768 -ngl 99 \
-  -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
+llama-server -m models/Qwen3.5-4B-Q4_K_M.gguf -c 32768 -ngl 99 \
+  -fa on -np 1 -ctk turbo2 -ctv turbo2 --reasoning off --port 8080
 cd orchestrator && cargo run --release --bin forge -- --config ../forge.config.toml chat
 ```

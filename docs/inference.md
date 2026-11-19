@@ -12,7 +12,7 @@ La topología HTTP (no gRPC) y el fork están fijados en ADR-0004.
 
 ## Arranque del llama-server
 
-Con un GGUF local (perfil A usa Qwen2.5-Coder-3B):
+Con un GGUF local (perfil A usa Qwen3.5-4B, ADR-0013):
 
 ```powershell
 cd <ruta-llama-cpp>
@@ -85,6 +85,13 @@ Resultado 2026-11-09, fork TurboQuant en 2x RTX 3060 12 GB (Fedora 44):
 |---|---|---|---:|---:|---:|
 | 3B Q4_K_M | turbo2 (32K) | 1 | 37% | **97%** | 90% (A) |
 | 7B Q4_K_M | turbo3 (64K) | 2 | 23% | **100%** | 95% (B) |
+| 4B Q4_K_M (ADR-0013) | turbo2 (32K) | 1 | 57% | **100%** | 90% (A) |
+| 4B Q4_K_M + LoRA A | turbo2 (32K) | 1 | **100%** | **100%** | 90% (A) |
+| 4B Q4_K_M fusionado Q4_K_M | turbo2 (32K) | 1 | **100%** | **100%** | 90% (A) |
+
+El adaptador LoRA del perfil A (RF-03) sube el tool-calling sin gramática del
+57% al 100%, y el modelo fusionado (RF-04) conserva esa tasa. Detalle del
+entrenamiento y del export en `docs/training.md`.
 
 El único fallo con gramática (3B) fue un `create_file` cortado por
 `max_tokens = 256` del test, no una violación de la gramática.
@@ -113,7 +120,10 @@ Los tipos `turbo2`…`turbo6` se eligen al arrancar el servidor con
 `-ctk`/`-ctv` y requieren flash attention (`-fa on`):
 
 ```bash
-# Perfil A: 3B, 32K, turbo2
+# Perfil A (ADR-0013): Qwen3.5-4B, 32K, turbo2
+llama-server -m models/Qwen3.5-4B-Q4_K_M.gguf -c 32768 -ngl 99 -fa on -np 1 \
+  -ctk turbo2 -ctv turbo2 --reasoning off --port 8080
+# Perfil A histórico: 3B, 32K, turbo2
 llama-server -m models/qwen2.5-coder-3b-instruct-q4_k_m.gguf \
   -c 32768 -ngl 99 -fa on -np 1 -ctk turbo2 -ctv turbo2 --port 8080
 # Perfil B: 7B, 64K, K f16 + V turbo3 (ADR-0006), capas repartidas entre las dos GPUs
@@ -137,13 +147,26 @@ Tamaño KV: línea `llama_kv_cache: size` del log de `llama-server -lv 4`.
 Velocidad: `llama-bench -fa 1 -p 0 -n 64 -d <profundidad>` (decodificación con
 la caché ya llena hasta esa profundidad).
 
-Perfil A, 3B Q4_K_M, 32K, una GPU (`CUDA_VISIBLE_DEVICES=0`):
+Perfil A, 3B Q4_K_M, 32K, una GPU (`CUDA_VISIBLE_DEVICES=0`) — medición
+histórica con el modelo anterior a ADR-0013:
 
 | K / V efectivo | KV a 32K | VRAM total | tok/s @4K | tok/s @32K |
 |---|---:|---:|---:|---:|
 | f16 / f16 | 1152 MiB | 3.27 GB | 116.4 | 85.8 |
 | q8_0 / turbo2 (por defecto al pedir turbo2) | 408 MiB | 2.53 GB | 100.1 | 50.4 |
 | turbo2 / turbo2 (auto-asimetría off) | 153 MiB | 2.28 GB | 107.9 | 79.0 |
+
+Perfil A con el modelo de ADR-0013 (Qwen3.5-4B Q4_K_M, 32K, una GPU,
+2026-11-19). El modelo es híbrido: solo 8 de sus 32 capas tienen atención con
+KV, por eso la caché es tan pequeña:
+
+| K / V efectivo | KV a 32K | VRAM total | tok/s @32K |
+|---|---:|---:|---:|
+| turbo2 / turbo2 | 161.5 MiB (K 68 + V 93.5) | 3.70 GB¹ | 55.9² |
+
+¹ `nvidia-smi` de la GPU, incluye ~0.8 GB del escritorio; el servidor suma
+2603.5 MiB de modelo + 161.5 de KV + 210 de cómputo.
+² Test `hu03_full_context` con 32 196 tokens de prompt, no `llama-bench`.
 
 Perfil B, 7B Q4_K_M, 64K, dos GPUs (reparto por capas por defecto):
 
@@ -224,6 +247,7 @@ Resultado 2026-11-09 (2x RTX 3060 12 GB de escritorio):
 | Perfil | Config | Prompt | tok/s | VRAM | Umbrales |
 |---|---|---:|---:|---|---|
 | A (1 GPU) | 3B, turbo2, 32K | 32 005 tok | 50.6 | 2538 MiB | ≥12 tok/s, ≤5837 MiB ✅ |
+| A (1 GPU, ADR-0013) | Qwen3.5-4B, turbo2, 32K | 32 196 tok | 55.9 | 3708 MiB | ≥12 tok/s, ≤5837 MiB ✅ |
 | B (2 GPUs) | 7B, f16/turbo3, 64K | 64 902 tok | 23.7 | 3744 / 4028 MiB | ≥22 tok/s, ≤11 673 MiB ✅ |
 
 El perfil A se ha medido en una GPU de escritorio (360 GB/s y 170 W). En la

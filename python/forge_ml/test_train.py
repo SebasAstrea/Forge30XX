@@ -51,7 +51,7 @@ def _dataset(tmp_path: Path) -> Path:
 def test_repo_config_profile_a_meets_rf03b_effective_batch() -> None:
     cfg = load_config(_REPO_CONFIG, "A", root=_REPO_CONFIG.parent)
     assert cfg.batch_size * cfg.grad_accum == 8
-    assert cfg.base_model.endswith("bnb-4bit")
+    assert cfg.base_model == "unsloth/Qwen3.5-4B"  # ADR-0013
     assert len(cfg.revision) == 40
 
 

@@ -32,14 +32,18 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   el puerto `[ui]`, sirve el build de SvelteKit y expone `/api/chat` (SSE de
   tokens), `/api/health` y `/api/tools/{id}/decision`; contrato en
   `docs/openapi.yaml`, frontend con reconexión y estado de conexión.
-- QLoRA del perfil B (HU-02): 7B en dos GPUs en 2 h 20 min; RF-08 sin gramática
-  pasa del 20% al 97% con el adaptador. RF-04: la fusión en f16 coincide con el
-  adaptador separado, y el export a Q4_K_M requiere los pesos de 16 bits
-  (`docs/training.md`).
-- QLoRA de tool-calling (RF-03, RF-03b, ADR-0012): `make dataset` (Glaive v2 +
-  sintético, con manifest) y `make train-lora PROFILE=A|B` con Unsloth. Perfil
-  A: época en 33.6 min con un pico de 2.5 GB; RF-08 sin gramática pasa del 30%
-  al 100% con el adaptador. Guía en `docs/training.md`.
+- QLoRA del perfil B (HU-02, histórica: retirada en ADR-0014): 7B en dos GPUs
+  en 2 h 20 min; RF-08 sin gramática pasa del 20% al 97% con el adaptador.
+  RF-04: la fusión en f16 coincide con el adaptador separado, y el export a
+  Q4_K_M requiere los pesos de 16 bits (`docs/training.md`).
+- QLoRA del perfil A (RF-03, RF-03b, ADR-0012/0013): `make dataset` (Glaive v2 +
+  sintético, con manifest) y `make train-lora PROFILE=A` con Unsloth sobre
+  Qwen3.5-4B. Época completa en 43 min 9 s con un pico de 4130 MiB; RF-08 sin
+  gramática pasa del 57% al 100% con el adaptador. Guía en `docs/training.md`.
+- Fusión y export del LoRA del perfil A (RF-04): la base de 16 bits convertida
+  a GGUF f16, fusionada y cuantizada una sola vez a Q4_K_M. PPL 1.1796 frente a
+  1.1825 del adaptador separado (−0.25%, criterio ±2%) y RF-08 100% sin
+  gramática. `docs/training.md#perfil-a-qwen35-4b`.
 - `forge doctor` (RF-06b, HU-00b): lee el enlace PCIe de cada GPU, avisa si es
   x4 o menor con su ancho de banda estimado e imprime los flags del
   llama-server para el perfil. Medición del reparto entre dos GPUs en
@@ -48,7 +52,7 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
   LLM-juez de AGENTS.md 11.5 sobre el CLI de opencode, sin dependencias nuevas.
 - Test de aceptación de HU-03/HU-03b con el contexto lleno
   (`orchestrator/tests/hu03_full_context.rs`, ignorado sin llama-server).
-  Perfil A 50.6 tok/s y 2538 MiB a 32K; perfil B 23.7 tok/s a 64K.
+  Perfil A 55.9 tok/s y 3708 MiB a 32K; perfil B 23.7 tok/s a 64K.
 
 ### Removed
 
