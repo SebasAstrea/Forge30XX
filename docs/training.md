@@ -89,6 +89,9 @@ RF-08 con el adaptador sobre el GGUF base Q4_K_M (30 prompts, 32K, turbo2):
 
 HU-01 pide ≥90% de tool-calls válidos: se cumple incluso sin gramática.
 
+El GGUF fusionado también pasa HU-03: 32 196 tok de prompt, 56.3 tok/s y
+3738 MiB a 32K con turbo2.
+
 ### Perfil A histórico (Qwen2.5-Coder-3B)
 
 Medido antes de ADR-0013 (2026-11-09), una RTX 3060 12 GB de escritorio.
