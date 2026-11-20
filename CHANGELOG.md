@@ -28,6 +28,13 @@ y el proyecto se adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 
 ### Added
 
+- Artefactos del perfil A publicados en Hugging Face: dataset de tool-calling
+  ([forge-tool-calling-dataset-v1](https://huggingface.co/datasets/SebasAstreaYah/forge-tool-calling-dataset-v1)),
+  adaptador QLoRA
+  ([qwen3.5-4b-forge-lora](https://huggingface.co/SebasAstreaYah/qwen3.5-4b-forge-lora))
+  y GGUF fusionado
+  ([qwen3.5-4b-forge-GGUF](https://huggingface.co/SebasAstreaYah/qwen3.5-4b-forge-GGUF)),
+  con tarjeta, Apache-2.0 y `SHA256SUMS`.
 - UI web parte 1 (S9, RF-18/RF-20, ADR-0015): `forge run --ui` levanta Axum en
   el puerto `[ui]`, sirve el build de SvelteKit y expone `/api/chat` (SSE de
   tokens), `/api/health` y `/api/tools/{id}/decision`; contrato en

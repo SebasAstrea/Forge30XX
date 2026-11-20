@@ -169,6 +169,21 @@ wget -P models/ https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen
 wget -P models/ https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF/resolve/main/Qwen3.6-35B-A3B-UD-Q4_K_M.gguf
 ```
 
+### Artefactos publicados (Hugging Face)
+
+El dataset de tool-calling, el adaptador QLoRA del perfil A y su modelo
+fusionado están publicados en Hugging Face:
+
+| Artefacto | Repositorio |
+|---|---|
+| Dataset (Glaive v2 + sintético, 9000 filas) | [SebasAstreaYah/forge-tool-calling-dataset-v1](https://huggingface.co/datasets/SebasAstreaYah/forge-tool-calling-dataset-v1) |
+| Adaptador QLoRA de Qwen3.5-4B | [SebasAstreaYah/qwen3.5-4b-forge-lora](https://huggingface.co/SebasAstreaYah/qwen3.5-4b-forge-lora) |
+| GGUF fusionado (Q4_K_M) | [SebasAstreaYah/qwen3.5-4b-forge-GGUF](https://huggingface.co/SebasAstreaYah/qwen3.5-4b-forge-GGUF) |
+
+Cada repo incluye tarjeta, licencia Apache-2.0, atribuciones y `SHA256SUMS`.
+El script de publicación vive fuera del repositorio, en
+`~/Descargas/forge-hf-publish/`.
+
 ---
 
 ## Uso rápido
